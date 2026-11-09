@@ -60,3 +60,19 @@ NOTIFY_EVENT_LABELS: dict[str, str] = {
     "armed": "Scharf geschaltet (armed)",
     "disarmed": "Unscharf geschaltet (disarmed)",
 }
+
+# Automatik (Phase 8): Präsenz- und Zeitsteuerung
+CONF_AUTO_ARM = "auto_arm"               # scharf, wenn alle weg
+CONF_AUTO_DISARM = "auto_disarm"         # unscharf, wenn erste Person heimkommt
+CONF_PRESENCE = "presence"               # person/device_tracker-Entitäten
+CONF_AUTO_ARM_MODE = "auto_arm_mode"     # Zielmodus beim Auto-Scharfschalten
+CONF_AUTO_ARM_DELAY = "auto_arm_delay"   # Sekunden Verzögerung nach „alle weg"
+CONF_NIGHT_SCHEDULE = "night_schedule"   # Nachtmodus nach Zeitplan
+CONF_NIGHT_START = "night_start"         # "HH:MM:SS"
+CONF_NIGHT_END = "night_end"             # "HH:MM:SS"
+CONF_NIGHT_REQUIRE_HOME = "night_require_home"  # nur scharf, wenn jemand zuhause
+
+DEFAULT_AUTO_ARM_MODE = "armed_away"
+DEFAULT_AUTO_ARM_DELAY = 120
+DEFAULT_NIGHT_START = "23:00:00"
+DEFAULT_NIGHT_END = "06:30:00"

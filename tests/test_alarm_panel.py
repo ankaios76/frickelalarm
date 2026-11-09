@@ -15,6 +15,10 @@ from pytest_homeassistant_custom_component.common import (
 
 from custom_components.frickelalarm.const import (
     CONF_ALWAYS,
+    CONF_AUTO_ARM,
+    CONF_AUTO_ARM_DELAY,
+    CONF_AUTO_ARM_MODE,
+    CONF_AUTO_DISARM,
     CONF_CODE,
     CONF_CODE_ARM_REQUIRED,
     CONF_DELAYED,
@@ -22,6 +26,7 @@ from custom_components.frickelalarm.const import (
     CONF_ENTRY_DELAY,
     CONF_EXIT_DELAY,
     CONF_MODES,
+    CONF_PRESENCE,
     CONF_SENSORS,
     CONF_TRIGGER_DURATION,
     DOMAIN,
@@ -210,6 +215,43 @@ async def test_config_services(hass: HomeAssistant) -> None:
         hass, DOMAIN, "remove_sensor", {"entity_id": eid, "sensor": "binary_sensor.motion"}
     )
     assert entry.options["sensors"] == []
+
+
+async def test_auto_arm_and_disarm_by_presence(hass: HomeAssistant) -> None:
+    hass.states.async_set("person.a", "home")
+    _, eid = await _setup(
+        hass,
+        _opts(
+            **{
+                CONF_AUTO_ARM: True,
+                CONF_AUTO_DISARM: True,
+                CONF_PRESENCE: ["person.a"],
+                CONF_AUTO_ARM_MODE: "armed_away",
+                CONF_AUTO_ARM_DELAY: 0,
+            }
+        ),
+    )
+    assert _state(hass, eid) == "disarmed"
+
+    # alle weg -> auto-scharf (Verzögerung 0)
+    hass.states.async_set("person.a", "not_home")
+    await hass.async_block_till_done()
+    assert _state(hass, eid) == "armed_away"
+
+    # Heimkehr -> auto-unscharf
+    hass.states.async_set("person.a", "home")
+    await hass.async_block_till_done()
+    assert _state(hass, eid) == "disarmed"
+
+
+async def test_set_automation_service(hass: HomeAssistant) -> None:
+    entry, eid = await _setup(hass, _opts())
+    await _call(hass, DOMAIN, "set_automation", {"entity_id": eid, "auto_arm": True})
+    assert entry.options[CONF_AUTO_ARM] is True
+    resp = await hass.services.async_call(
+        DOMAIN, "get_config", {"entity_id": eid}, blocking=True, return_response=True
+    )
+    assert resp[eid]["automation"]["auto_arm"] is True
 
 
 async def test_code_required_rejects_wrong_code(hass: HomeAssistant) -> None:

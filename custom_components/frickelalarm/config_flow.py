@@ -28,12 +28,17 @@ from homeassistant.helpers.selector import (
     TextSelector,
     TextSelectorConfig,
     TextSelectorType,
+    TimeSelector,
 )
 
 from .const import (
     ARM_MODE_LABELS,
     ARM_MODES,
     CONF_ALWAYS,
+    CONF_AUTO_ARM,
+    CONF_AUTO_ARM_DELAY,
+    CONF_AUTO_ARM_MODE,
+    CONF_AUTO_DISARM,
     CONF_CODE,
     CONF_CODE_ARM_REQUIRED,
     CONF_CODE_DISARM_REQUIRED,
@@ -42,15 +47,24 @@ from .const import (
     CONF_ENTRY_DELAY,
     CONF_EXIT_DELAY,
     CONF_MODES,
+    CONF_NIGHT_END,
+    CONF_NIGHT_REQUIRE_HOME,
+    CONF_NIGHT_SCHEDULE,
+    CONF_NIGHT_START,
     CONF_NOTIFY_EVENTS,
     CONF_NOTIFY_MESSAGE,
     CONF_NOTIFY_SERVICE,
+    CONF_PRESENCE,
     CONF_SENSORS,
     CONF_SIRENS,
     CONF_TRIGGER_DURATION,
+    DEFAULT_AUTO_ARM_DELAY,
+    DEFAULT_AUTO_ARM_MODE,
     DEFAULT_ENTRY_DELAY,
     DEFAULT_EXIT_DELAY,
     DEFAULT_NAME,
+    DEFAULT_NIGHT_END,
+    DEFAULT_NIGHT_START,
     DEFAULT_NOTIFY_MESSAGE,
     DEFAULT_TRIGGER_DURATION,
     DOMAIN,
@@ -133,8 +147,87 @@ class FrickelalarmOptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         return self.async_show_menu(
             step_id="init",
-            menu_options=["general", "sensors", "times", "actions"],
+            menu_options=["general", "sensors", "times", "actions", "automation"],
         )
+
+    # --- Automatik (Präsenz + Zeitplan) -----------------------------------
+    async def async_step_automation(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            return self._save(
+                {
+                    CONF_AUTO_ARM: user_input.get(CONF_AUTO_ARM, False),
+                    CONF_AUTO_DISARM: user_input.get(CONF_AUTO_DISARM, False),
+                    CONF_PRESENCE: list(user_input.get(CONF_PRESENCE, [])),
+                    CONF_AUTO_ARM_MODE: user_input.get(
+                        CONF_AUTO_ARM_MODE, DEFAULT_AUTO_ARM_MODE
+                    ),
+                    CONF_AUTO_ARM_DELAY: int(
+                        user_input.get(CONF_AUTO_ARM_DELAY, DEFAULT_AUTO_ARM_DELAY)
+                    ),
+                    CONF_NIGHT_SCHEDULE: user_input.get(CONF_NIGHT_SCHEDULE, False),
+                    CONF_NIGHT_START: user_input.get(
+                        CONF_NIGHT_START, DEFAULT_NIGHT_START
+                    ),
+                    CONF_NIGHT_END: user_input.get(CONF_NIGHT_END, DEFAULT_NIGHT_END),
+                    CONF_NIGHT_REQUIRE_HOME: user_input.get(
+                        CONF_NIGHT_REQUIRE_HOME, False
+                    ),
+                }
+            )
+
+        opts = self.config_entry.options
+        schema = vol.Schema(
+            {
+                vol.Optional(
+                    CONF_AUTO_ARM, default=opts.get(CONF_AUTO_ARM, False)
+                ): BooleanSelector(),
+                vol.Optional(
+                    CONF_AUTO_DISARM, default=opts.get(CONF_AUTO_DISARM, False)
+                ): BooleanSelector(),
+                vol.Optional(
+                    CONF_PRESENCE, default=opts.get(CONF_PRESENCE, [])
+                ): EntitySelector(
+                    EntitySelectorConfig(
+                        domain=["person", "device_tracker"], multiple=True
+                    )
+                ),
+                vol.Optional(
+                    CONF_AUTO_ARM_MODE,
+                    default=opts.get(CONF_AUTO_ARM_MODE, DEFAULT_AUTO_ARM_MODE),
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=[
+                            SelectOptionDict(value=m, label=ARM_MODE_LABELS[m])
+                            for m in ARM_MODES
+                        ],
+                        mode=SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+                vol.Optional(
+                    CONF_AUTO_ARM_DELAY,
+                    default=opts.get(CONF_AUTO_ARM_DELAY, DEFAULT_AUTO_ARM_DELAY),
+                ): NumberSelector(
+                    NumberSelectorConfig(min=0, max=3600, step=1, mode=NumberSelectorMode.BOX)
+                ),
+                vol.Optional(
+                    CONF_NIGHT_SCHEDULE, default=opts.get(CONF_NIGHT_SCHEDULE, False)
+                ): BooleanSelector(),
+                vol.Optional(
+                    CONF_NIGHT_START,
+                    default=opts.get(CONF_NIGHT_START, DEFAULT_NIGHT_START),
+                ): TimeSelector(),
+                vol.Optional(
+                    CONF_NIGHT_END, default=opts.get(CONF_NIGHT_END, DEFAULT_NIGHT_END)
+                ): TimeSelector(),
+                vol.Optional(
+                    CONF_NIGHT_REQUIRE_HOME,
+                    default=opts.get(CONF_NIGHT_REQUIRE_HOME, False),
+                ): BooleanSelector(),
+            }
+        )
+        return self.async_show_form(step_id="automation", data_schema=schema)
 
     # --- Reaktionen (Aktoren + Benachrichtigung) --------------------------
     async def async_step_actions(

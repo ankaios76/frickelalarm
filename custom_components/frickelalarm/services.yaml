@@ -136,3 +136,19 @@ get_config:
     entity:
       integration: frickelalarm
       domain: alarm_control_panel
+
+set_automation:
+  target:
+    entity:
+      integration: frickelalarm
+      domain: alarm_control_panel
+  fields:
+    auto_arm:
+      selector:
+        boolean:
+    auto_disarm:
+      selector:
+        boolean:
+    night_schedule:
+      selector:
+        boolean:

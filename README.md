@@ -4,13 +4,13 @@ Eine per UI konfigurierbare **Alarmanlagen-Integration für Home Assistant** –
 Alarm-Engine (Modi, Ein-/Ausgangsverzögerung, echtes Auslösen) und Mehrbereich-Unterstützung.
 Installierbar über HACS bzw. den **Home Assistant Marketplace**.
 
-> **Status: 0.9.1 – öffentliche Beta.** Die Engine läuft inklusive **Reaktionen**, **Komfort**,
+> **Status: 0.10.0 – öffentliche Beta.** Die Engine läuft inklusive **Reaktionen**, **Komfort**,
 > einer **eigenen Lovelace-Karte** und **Konfiguration per Dienst** – damit lässt sich Frickelalarm
 > auch von einem LLM über den **Home-Assistant-MCP-Server** einrichten. Dazu eine automatisierte
 > Test-Suite, CI (hassfest + HACS + pytest) und ein eigenes Icon. Siehe [CONCEPT.md](CONCEPT.md).
 > Rückmeldungen und Tester sind ausdrücklich willkommen.
 
-## Was schon funktioniert (0.9.1)
+## Was schon funktioniert (0.10.0)
 
 - Bedienfeld (`alarm_control_panel`) mit den Modi **Zuhause / Abwesend / Nacht / Urlaub**
 - **Sensorauswahl je Modus**: pro Sensor festlegen, in welchen Modi er scharf ist
@@ -31,8 +31,10 @@ Installierbar über HACS bzw. den **Home Assistant Marketplace**.
 - **Eigene Lovelace-Karte** (`custom:frickelalarm-card`) im Frickelfabrik-Look – wird von der
   Integration automatisch mit ausgeliefert und registriert (keine manuelle Ressource nötig);
   mit aktiver Modus-Hervorhebung, Countdown und optionalem **Zahlen-Tastenfeld**
+- **Automatik**: **Auto-scharf**, wenn alle gewählten Personen weg sind (mit Verzögerung),
+  **Auto-unscharf** bei Heimkehr der ersten Person, und **Nachtmodus nach Zeitplan**
 - **Konfiguration per Dienst** (`add_sensor`, `remove_sensor`, `set_times`, `set_reactions`,
-  `get_config`) – damit auch per LLM über den Home-Assistant-MCP-Server einrichtbar
+  `set_automation`, `get_config`) – damit auch per LLM über den Home-Assistant-MCP-Server einrichtbar
 - Zustand übersteht Neustarts
 
 ## Qualität
@@ -40,6 +42,20 @@ Installierbar über HACS bzw. den **Home Assistant Marketplace**.
 - **Tests**: pytest-Suite (pytest-homeassistant-custom-component) für Config-Flow und Engine
 - **CI**: GitHub Actions mit `hassfest`, HACS-Validierung und `pytest`
 - **Icon/Logo** im `brand/`-Ordner (Frickelfabrik-Look)
+
+## Automatik (Präsenz & Zeitplan)
+
+Unter **Konfigurieren → Automatik**:
+
+- **Auto-scharf**, wenn alle gewählten Personen/Tracker die Home-Zone verlassen haben –
+  mit einstellbarer Verzögerung und wählbarem Modus. Kommt jemand während der Verzögerung
+  zurück, wird nicht scharf geschaltet.
+- **Auto-unscharf**, sobald die erste Person heimkommt – auch während Eingangsverzögerung
+  oder laufendem Alarm.
+- **Nachtmodus nach Zeitplan** (Beginn/Ende), optional nur wenn jemand zuhause ist.
+
+Zur Laufzeit lassen sich die drei Schalter per Dienst `frickelalarm.set_automation` ein- und
+ausschalten (auch per LLM/MCP). Der aktuelle Stand steht im Attribut `automatik` der Entität.
 
 ## Konfiguration per Dienst / MCP
 

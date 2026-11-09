@@ -25,7 +25,23 @@
           "general": "Allgemein (Code/PIN)",
           "sensors": "Sensoren",
           "times": "Verzögerungen & Alarmdauer",
-          "actions": "Reaktionen (Sirene, Licht, Benachrichtigung)"
+          "actions": "Reaktionen (Sirene, Licht, Benachrichtigung)",
+          "automation": "Automatik (Präsenz & Nachtplan)"
+        }
+      },
+      "automation": {
+        "title": "Automatik",
+        "description": "Scharf/unscharf nach Anwesenheit und Nachtmodus nach Zeitplan. „Alle weg\" = jede gewählte Person/Tracker ist nicht zuhause.",
+        "data": {
+          "auto_arm": "Automatisch scharf, wenn alle weg sind",
+          "auto_disarm": "Automatisch unscharf, wenn die erste Person heimkommt",
+          "presence": "Personen / Tracker für die Anwesenheit",
+          "auto_arm_mode": "Modus beim automatischen Scharfschalten",
+          "auto_arm_delay": "Verzögerung nach „alle weg\" (Sekunden)",
+          "night_schedule": "Nachtmodus nach Zeitplan",
+          "night_start": "Nachtmodus Beginn",
+          "night_end": "Nachtmodus Ende",
+          "night_require_home": "Nachtmodus nur, wenn jemand zuhause ist"
         }
       },
       "actions": {
@@ -133,6 +149,15 @@
     "get_config": {
       "name": "Konfiguration abrufen",
       "description": "Gibt die aktuelle Konfiguration des Bereichs zurück (Sensoren, Zeiten, Reaktionen, Zustand) – ideal für LLM-/MCP-Zugriff."
+    },
+    "set_automation": {
+      "name": "Automatik schalten",
+      "description": "Schaltet die Automatik-Funktionen zur Laufzeit ein/aus (nur angegebene Werte).",
+      "fields": {
+        "auto_arm": { "name": "Auto-Scharf", "description": "Scharf, wenn alle weg sind." },
+        "auto_disarm": { "name": "Auto-Unscharf", "description": "Unscharf bei Heimkehr." },
+        "night_schedule": { "name": "Nachtplan", "description": "Nachtmodus nach Zeitplan." }
+      }
     }
   },
   "exceptions": {

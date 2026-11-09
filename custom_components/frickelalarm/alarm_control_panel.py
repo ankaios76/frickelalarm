@@ -20,7 +20,7 @@ from homeassistant.components.alarm_control_panel import (
     CodeFormat,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_NAME, STATE_ON
+from homeassistant.const import CONF_NAME, STATE_HOME, STATE_ON
 from homeassistant.core import (
     Event,
     EventStateChangedData,
@@ -36,6 +36,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import (
     async_call_later,
     async_track_state_change_event,
+    async_track_time_change,
 )
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.template import Template
@@ -44,6 +45,10 @@ import homeassistant.util.dt as dt_util
 from .const import (
     ARM_MODES,
     CONF_ALWAYS,
+    CONF_AUTO_ARM,
+    CONF_AUTO_ARM_DELAY,
+    CONF_AUTO_ARM_MODE,
+    CONF_AUTO_DISARM,
     CONF_CODE,
     CONF_CODE_ARM_REQUIRED,
     CONF_CODE_DISARM_REQUIRED,
@@ -52,15 +57,24 @@ from .const import (
     CONF_ENTRY_DELAY,
     CONF_EXIT_DELAY,
     CONF_MODES,
+    CONF_NIGHT_END,
+    CONF_NIGHT_REQUIRE_HOME,
+    CONF_NIGHT_SCHEDULE,
+    CONF_NIGHT_START,
     CONF_NOTIFY_EVENTS,
     CONF_NOTIFY_MESSAGE,
     CONF_NOTIFY_SERVICE,
+    CONF_PRESENCE,
     CONF_SENSORS,
     CONF_SIRENS,
     CONF_TRIGGER_DURATION,
+    DEFAULT_AUTO_ARM_DELAY,
+    DEFAULT_AUTO_ARM_MODE,
     DEFAULT_ENTRY_DELAY,
     DEFAULT_EXIT_DELAY,
     DEFAULT_NAME,
+    DEFAULT_NIGHT_END,
+    DEFAULT_NIGHT_START,
     DEFAULT_NOTIFY_MESSAGE,
     DEFAULT_TRIGGER_DURATION,
     DOMAIN,
@@ -136,6 +150,15 @@ async def async_setup_entry(
             "async_set_reactions",
         )
         platform.async_register_entity_service(
+            "set_automation",
+            {
+                vol.Optional("auto_arm"): cv.boolean,
+                vol.Optional("auto_disarm"): cv.boolean,
+                vol.Optional("night_schedule"): cv.boolean,
+            },
+            "async_set_automation",
+        )
+        platform.async_register_entity_service(
             "get_config",
             None,
             "async_get_config",
@@ -176,6 +199,11 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
         self._cancel_trigger = None
         self._unsub_sensors = None
         self._bypassed: set[str] = set()
+        # Automatik-Laufzeitstatus
+        self._unsub_presence = None
+        self._unsub_time: list = []
+        self._cancel_autoarm = None
+        self._night_active = False
 
     # --- Konfiguration (aus Optionen) -------------------------------------
     @property
@@ -211,6 +239,31 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
         return bool(self._code) and bool(
             self._entry.options.get(CONF_CODE_ARM_REQUIRED, False)
         )
+
+    # --- Automatik-Optionen ----------------------------------------------
+    @property
+    def _presence(self) -> list[str]:
+        return self._entry.options.get(CONF_PRESENCE) or []
+
+    @property
+    def _auto_arm(self) -> bool:
+        return bool(self._entry.options.get(CONF_AUTO_ARM, False))
+
+    @property
+    def _auto_disarm(self) -> bool:
+        return bool(self._entry.options.get(CONF_AUTO_DISARM, False))
+
+    @property
+    def _auto_arm_mode(self) -> str:
+        return self._entry.options.get(CONF_AUTO_ARM_MODE, DEFAULT_AUTO_ARM_MODE)
+
+    @property
+    def _auto_arm_delay(self) -> int:
+        return int(self._entry.options.get(CONF_AUTO_ARM_DELAY, DEFAULT_AUTO_ARM_DELAY))
+
+    @property
+    def _night_schedule(self) -> bool:
+        return bool(self._entry.options.get(CONF_NIGHT_SCHEDULE, False))
 
     def _entity_label(self, entity_id: str) -> str:
         state = self.hass.states.get(entity_id)
@@ -268,6 +321,14 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
                 }
             )
         attrs["aktoren"] = aktoren
+
+        # Automatik-Status
+        attrs["automatik"] = {
+            "auto_scharf": self._auto_arm,
+            "auto_unscharf": self._auto_disarm,
+            "nachtplan": self._night_schedule,
+            "personen_zuhause": self._someone_home(),
+        }
         return attrs
 
     # --- Lifecycle --------------------------------------------------------
@@ -290,12 +351,14 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
             if restored in _ARMED_STATES:
                 self._arm_mode = restored
         self._subscribe()
+        self._setup_automation()
 
     async def async_will_remove_from_hass(self) -> None:
         self._clear_timers()
         if self._unsub_sensors is not None:
             self._unsub_sensors()
             self._unsub_sensors = None
+        self._teardown_automation()
 
     @callback
     def _subscribe(self) -> None:
@@ -307,6 +370,151 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
             self._unsub_sensors = async_track_state_change_event(
                 self.hass, entity_ids, self._sensor_changed
             )
+
+    # --- Automatik (Phase 8) ---------------------------------------------
+    @staticmethod
+    def _parse_time(value: str) -> tuple[int, int, int] | None:
+        try:
+            parts = [int(x) for x in str(value).split(":")]
+            while len(parts) < 3:
+                parts.append(0)
+            return parts[0], parts[1], parts[2]
+        except (ValueError, TypeError):
+            return None
+
+    @callback
+    def _mode_from_str(self, value: str) -> AlarmControlPanelState:
+        try:
+            return AlarmControlPanelState(value)
+        except ValueError:
+            return AlarmControlPanelState.ARMED_AWAY
+
+    @callback
+    def _someone_home(self) -> bool:
+        if not getattr(self, "hass", None) or not self._presence:
+            return False
+        for eid in self._presence:
+            st = self.hass.states.get(eid)
+            if st is not None and st.state == STATE_HOME:
+                return True
+        return False
+
+    @callback
+    def _all_away(self) -> bool:
+        if not self._presence:
+            return False
+        for eid in self._presence:
+            st = self.hass.states.get(eid)
+            if st is None or st.state in (STATE_HOME, "unknown", "unavailable", ""):
+                return False
+        return True
+
+    @callback
+    def _setup_automation(self) -> None:
+        self._teardown_automation()
+        if (self._auto_arm or self._auto_disarm) and self._presence:
+            self._unsub_presence = async_track_state_change_event(
+                self.hass, self._presence, self._presence_changed
+            )
+        if self._night_schedule:
+            start = self._parse_time(
+                self._entry.options.get(CONF_NIGHT_START, DEFAULT_NIGHT_START)
+            )
+            end = self._parse_time(
+                self._entry.options.get(CONF_NIGHT_END, DEFAULT_NIGHT_END)
+            )
+            if start:
+                self._unsub_time.append(
+                    async_track_time_change(
+                        self.hass, self._night_start,
+                        hour=start[0], minute=start[1], second=start[2],
+                    )
+                )
+            if end:
+                self._unsub_time.append(
+                    async_track_time_change(
+                        self.hass, self._night_end,
+                        hour=end[0], minute=end[1], second=end[2],
+                    )
+                )
+
+    @callback
+    def _teardown_automation(self) -> None:
+        if self._unsub_presence is not None:
+            self._unsub_presence()
+            self._unsub_presence = None
+        for unsub in self._unsub_time:
+            unsub()
+        self._unsub_time = []
+        if self._cancel_autoarm is not None:
+            self._cancel_autoarm()
+            self._cancel_autoarm = None
+
+    @callback
+    def _presence_changed(self, event: Event[EventStateChangedData]) -> None:
+        new = event.data["new_state"]
+        old = event.data["old_state"]
+        arrived = (
+            new is not None
+            and new.state == STATE_HOME
+            and (old is None or old.state != STATE_HOME)
+        )
+
+        # Heimkehr: geplantes Auto-Scharf abbrechen
+        if new is not None and new.state == STATE_HOME and self._cancel_autoarm is not None:
+            self._cancel_autoarm()
+            self._cancel_autoarm = None
+
+        # Heimkehr: Auto-Unscharf (auch während pending/triggered)
+        if arrived and self._auto_disarm and self._attr_alarm_state != AlarmControlPanelState.DISARMED:
+            label = (new.name or "jemand") if new else "jemand"
+            _LOGGER.info("Frickelalarm: Auto-unscharf (Heimkehr: %s)", label)
+            self._disarm_internal()
+            return
+
+        # Alle weg: Auto-Scharf nach Verzögerung planen
+        if (
+            self._auto_arm
+            and self._attr_alarm_state == AlarmControlPanelState.DISARMED
+            and self._all_away()
+            and self._cancel_autoarm is None
+        ):
+            if self._auto_arm_delay > 0:
+                self._cancel_autoarm = async_call_later(
+                    self.hass, self._auto_arm_delay, self._autoarm_elapsed
+                )
+            else:
+                self._autoarm_elapsed(None)
+
+    @callback
+    def _autoarm_elapsed(self, _now) -> None:
+        self._cancel_autoarm = None
+        if (
+            self._auto_arm
+            and self._attr_alarm_state == AlarmControlPanelState.DISARMED
+            and self._all_away()
+        ):
+            _LOGGER.info("Frickelalarm: Auto-scharf (alle abwesend)")
+            self._arm_now(self._mode_from_str(self._auto_arm_mode))
+
+    @callback
+    def _night_start(self, _now) -> None:
+        if not self._night_schedule:
+            return
+        require_home = bool(self._entry.options.get(CONF_NIGHT_REQUIRE_HOME, False))
+        if require_home and not self._someone_home():
+            return
+        if self._attr_alarm_state == AlarmControlPanelState.DISARMED:
+            _LOGGER.info("Frickelalarm: Nachtmodus (Zeitplan)")
+            self._night_active = True
+            self._arm_now(AlarmControlPanelState.ARMED_NIGHT)
+
+    @callback
+    def _night_end(self, _now) -> None:
+        if self._night_active and self._attr_alarm_state == AlarmControlPanelState.ARMED_NIGHT:
+            _LOGGER.info("Frickelalarm: Nachtmodus beendet (Zeitplan)")
+            self._disarm_internal()
+        self._night_active = False
 
     # --- Timer-Verwaltung -------------------------------------------------
     @callback
@@ -521,6 +729,14 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
             self._set(self._arm_mode)
 
     @callback
+    def _arm_now(self, target: AlarmControlPanelState) -> None:
+        """Sofort scharf schalten (Automatik: ohne Ausgangsverzögerung/Code)."""
+        self._clear_timers()
+        self._arm_mode = target
+        self._reason = None
+        self._set(target)
+
+    @callback
     def _start_pending(self, reason: str) -> None:
         self._reason = reason
         self._timer_end = dt_util.utcnow() + timedelta(seconds=self._entry_delay)
@@ -563,10 +779,19 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
         self._validate(
             code, bool(self._entry.options.get(CONF_CODE_DISARM_REQUIRED, False))
         )
+        self._disarm_internal()
+
+    @callback
+    def _disarm_internal(self) -> None:
+        """Unscharf schalten ohne Code-Prüfung (auch für Automatik)."""
         self._clear_timers()
+        if self._cancel_autoarm is not None:
+            self._cancel_autoarm()
+            self._cancel_autoarm = None
         self._arm_mode = None
         self._reason = None
         self._bypassed.clear()
+        self._night_active = False
         self._set(AlarmControlPanelState.DISARMED)
 
     async def async_alarm_arm_home(self, code: str | None = None) -> None:
@@ -675,6 +900,23 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
         if changes:
             self._update_options(changes)
 
+    async def async_set_automation(
+        self,
+        auto_arm: bool | None = None,
+        auto_disarm: bool | None = None,
+        night_schedule: bool | None = None,
+    ) -> None:
+        """Automatik-Schalter zur Laufzeit setzen (auch für LLM/MCP)."""
+        changes: dict[str, Any] = {}
+        if auto_arm is not None:
+            changes[CONF_AUTO_ARM] = auto_arm
+        if auto_disarm is not None:
+            changes[CONF_AUTO_DISARM] = auto_disarm
+        if night_schedule is not None:
+            changes[CONF_NIGHT_SCHEDULE] = night_schedule
+        if changes:
+            self._update_options(changes)
+
     async def async_get_config(self) -> ServiceResponse:
         """Aktuelle Konfiguration zurückgeben (für LLM/MCP und Automationen)."""
         o = self._entry.options
@@ -690,4 +932,15 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
             "notify_service": o.get(CONF_NOTIFY_SERVICE, ""),
             "notify_events": o.get(CONF_NOTIFY_EVENTS) or [],
             "bypassed": sorted(self._bypassed),
+            "automation": {
+                "auto_arm": self._auto_arm,
+                "auto_disarm": self._auto_disarm,
+                "presence": self._presence,
+                "auto_arm_mode": self._auto_arm_mode,
+                "auto_arm_delay": self._auto_arm_delay,
+                "night_schedule": self._night_schedule,
+                "night_start": o.get(CONF_NIGHT_START, DEFAULT_NIGHT_START),
+                "night_end": o.get(CONF_NIGHT_END, DEFAULT_NIGHT_END),
+                "night_require_home": bool(o.get(CONF_NIGHT_REQUIRE_HOME, False)),
+            },
         }

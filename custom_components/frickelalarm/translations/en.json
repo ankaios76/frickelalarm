@@ -25,7 +25,23 @@
           "general": "General (code/PIN)",
           "sensors": "Sensors",
           "times": "Delays & alarm duration",
-          "actions": "Reactions (siren, light, notification)"
+          "actions": "Reactions (siren, light, notification)",
+          "automation": "Automation (presence & night schedule)"
+        }
+      },
+      "automation": {
+        "title": "Automation",
+        "description": "Arm/disarm by presence and night mode on a schedule. \"All away\" = every selected person/tracker is not home.",
+        "data": {
+          "auto_arm": "Arm automatically when everyone has left",
+          "auto_disarm": "Disarm automatically when the first person returns",
+          "presence": "People / trackers for presence",
+          "auto_arm_mode": "Mode for automatic arming",
+          "auto_arm_delay": "Delay after \"all away\" (seconds)",
+          "night_schedule": "Night mode on a schedule",
+          "night_start": "Night mode start",
+          "night_end": "Night mode end",
+          "night_require_home": "Night mode only when someone is home"
         }
       },
       "actions": {
@@ -133,6 +149,15 @@
     "get_config": {
       "name": "Get configuration",
       "description": "Returns the current configuration of the area (sensors, times, reactions, state) – ideal for LLM/MCP access."
+    },
+    "set_automation": {
+      "name": "Set automation",
+      "description": "Switches the automation features on/off at runtime (only the values given).",
+      "fields": {
+        "auto_arm": { "name": "Auto-arm", "description": "Arm when everyone is away." },
+        "auto_disarm": { "name": "Auto-disarm", "description": "Disarm when someone returns." },
+        "night_schedule": { "name": "Night schedule", "description": "Night mode on a schedule." }
+      }
     }
   },
   "exceptions": {
