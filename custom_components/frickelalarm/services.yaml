@@ -152,3 +152,21 @@ set_automation:
     night_schedule:
       selector:
         boolean:
+
+panic:
+  target:
+    entity:
+      integration: frickelalarm
+      domain: alarm_control_panel
+
+silence:
+  target:
+    entity:
+      integration: frickelalarm
+      domain: alarm_control_panel
+
+skip_exit_delay:
+  target:
+    entity:
+      integration: frickelalarm
+      domain: alarm_control_panel

@@ -59,7 +59,9 @@
         "data": {
           "code": "Code (PIN, optional)",
           "code_arm_required": "Require code to arm",
-          "code_disarm_required": "Require code to disarm"
+          "code_disarm_required": "Require code to disarm",
+          "tamper_detection": "Report tamper/signal loss (sensor unavailable while armed)",
+          "open_on_arm": "Open sensors when arming"
         }
       },
       "times": {
@@ -158,11 +160,26 @@
         "auto_disarm": { "name": "Auto-disarm", "description": "Disarm when someone returns." },
         "night_schedule": { "name": "Night schedule", "description": "Night mode on a schedule." }
       }
+    },
+    "panic": {
+      "name": "Panic",
+      "description": "Triggers the alarm immediately, regardless of mode."
+    },
+    "silence": {
+      "name": "Silence siren",
+      "description": "Turns the actors (siren/lights) off – the alarm keeps running silently."
+    },
+    "skip_exit_delay": {
+      "name": "Arm now",
+      "description": "Ends a running exit delay immediately."
     }
   },
   "exceptions": {
     "invalid_code": {
       "message": "Invalid code."
+    },
+    "sensors_open": {
+      "message": "Cannot arm – open sensors: {sensors}"
     }
   }
 }

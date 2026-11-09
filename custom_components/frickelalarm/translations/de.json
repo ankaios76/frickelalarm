@@ -59,7 +59,9 @@
         "data": {
           "code": "Code (PIN, optional)",
           "code_arm_required": "Code zum Scharfschalten nötig",
-          "code_disarm_required": "Code zum Unscharfschalten nötig"
+          "code_disarm_required": "Code zum Unscharfschalten nötig",
+          "tamper_detection": "Sabotage/Signalverlust melden (Sensor unerreichbar, während scharf)",
+          "open_on_arm": "Offene Sensoren beim Scharfschalten"
         }
       },
       "times": {
@@ -158,11 +160,26 @@
         "auto_disarm": { "name": "Auto-Unscharf", "description": "Unscharf bei Heimkehr." },
         "night_schedule": { "name": "Nachtplan", "description": "Nachtmodus nach Zeitplan." }
       }
+    },
+    "panic": {
+      "name": "Panik",
+      "description": "Löst sofort Alarm aus, unabhängig vom Modus."
+    },
+    "silence": {
+      "name": "Sirene verstummen",
+      "description": "Schaltet die Aktoren (Sirene/Licht) aus – der Alarm läuft still weiter."
+    },
+    "skip_exit_delay": {
+      "name": "Jetzt scharf",
+      "description": "Beendet eine laufende Ausgangsverzögerung sofort."
     }
   },
   "exceptions": {
     "invalid_code": {
       "message": "Ungültiger Code."
+    },
+    "sensors_open": {
+      "message": "Scharfschalten nicht möglich – offene Sensoren: {sensors}"
     }
   }
 }

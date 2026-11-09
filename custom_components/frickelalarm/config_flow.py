@@ -54,9 +54,11 @@ from .const import (
     CONF_NOTIFY_EVENTS,
     CONF_NOTIFY_MESSAGE,
     CONF_NOTIFY_SERVICE,
+    CONF_OPEN_ON_ARM,
     CONF_PRESENCE,
     CONF_SENSORS,
     CONF_SIRENS,
+    CONF_TAMPER,
     CONF_TRIGGER_DURATION,
     DEFAULT_AUTO_ARM_DELAY,
     DEFAULT_AUTO_ARM_MODE,
@@ -66,10 +68,14 @@ from .const import (
     DEFAULT_NIGHT_END,
     DEFAULT_NIGHT_START,
     DEFAULT_NOTIFY_MESSAGE,
+    DEFAULT_OPEN_ON_ARM,
+    DEFAULT_TAMPER,
     DEFAULT_TRIGGER_DURATION,
     DOMAIN,
     NOTIFY_EVENT_LABELS,
     NOTIFY_EVENTS,
+    OPEN_ON_ARM_LABELS,
+    OPEN_ON_ARM_OPTIONS,
 )
 
 _SECONDS = NumberSelector(
@@ -317,6 +323,10 @@ class FrickelalarmOptionsFlow(OptionsFlow):
                     CONF_CODE_DISARM_REQUIRED: user_input.get(
                         CONF_CODE_DISARM_REQUIRED, False
                     ),
+                    CONF_TAMPER: user_input.get(CONF_TAMPER, DEFAULT_TAMPER),
+                    CONF_OPEN_ON_ARM: user_input.get(
+                        CONF_OPEN_ON_ARM, DEFAULT_OPEN_ON_ARM
+                    ),
                 }
             )
 
@@ -332,6 +342,21 @@ class FrickelalarmOptionsFlow(OptionsFlow):
                     CONF_CODE_DISARM_REQUIRED,
                     default=opts.get(CONF_CODE_DISARM_REQUIRED, False),
                 ): bool,
+                vol.Optional(
+                    CONF_TAMPER, default=opts.get(CONF_TAMPER, DEFAULT_TAMPER)
+                ): BooleanSelector(),
+                vol.Optional(
+                    CONF_OPEN_ON_ARM,
+                    default=opts.get(CONF_OPEN_ON_ARM, DEFAULT_OPEN_ON_ARM),
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=[
+                            SelectOptionDict(value=o, label=OPEN_ON_ARM_LABELS[o])
+                            for o in OPEN_ON_ARM_OPTIONS
+                        ],
+                        mode=SelectSelectorMode.DROPDOWN,
+                    )
+                ),
             }
         )
         return self.async_show_form(step_id="general", data_schema=schema)

@@ -26,8 +26,10 @@ from custom_components.frickelalarm.const import (
     CONF_ENTRY_DELAY,
     CONF_EXIT_DELAY,
     CONF_MODES,
+    CONF_OPEN_ON_ARM,
     CONF_PRESENCE,
     CONF_SENSORS,
+    CONF_TAMPER,
     CONF_TRIGGER_DURATION,
     DOMAIN,
 )
@@ -252,6 +254,62 @@ async def test_set_automation_service(hass: HomeAssistant) -> None:
         DOMAIN, "get_config", {"entity_id": eid}, blocking=True, return_response=True
     )
     assert resp[eid]["automation"]["auto_arm"] is True
+
+
+async def test_tamper_fires_event(hass: HomeAssistant) -> None:
+    hass.states.async_set("binary_sensor.motion", "off")
+    events = []
+    hass.bus.async_listen("frickelalarm_tamper", lambda e: events.append(e))
+    _, eid = await _setup(
+        hass, _opts(sensors=[_sensor("binary_sensor.motion")], **{CONF_TAMPER: True})
+    )
+    await _call(hass, "alarm_control_panel", "alarm_arm_away", {"entity_id": eid})
+    hass.states.async_set("binary_sensor.motion", "unavailable")
+    await hass.async_block_till_done()
+    assert len(events) == 1
+    assert _state(hass, eid) == "armed_away"  # Sabotage meldet, löst aber nicht aus
+
+
+async def test_panic_triggers(hass: HomeAssistant) -> None:
+    _, eid = await _setup(hass, _opts())
+    await _call(hass, DOMAIN, "panic", {"entity_id": eid})
+    assert _state(hass, eid) == "triggered"
+
+
+async def test_skip_exit_delay(hass: HomeAssistant) -> None:
+    _, eid = await _setup(hass, _opts(exit_delay=30))
+    await _call(hass, "alarm_control_panel", "alarm_arm_away", {"entity_id": eid})
+    assert _state(hass, eid) == "arming"
+    await _call(hass, DOMAIN, "skip_exit_delay", {"entity_id": eid})
+    assert _state(hass, eid) == "armed_away"
+
+
+async def test_open_on_arm_block(hass: HomeAssistant) -> None:
+    hass.states.async_set("binary_sensor.door", "on")
+    _, eid = await _setup(
+        hass,
+        _opts(sensors=[_sensor("binary_sensor.door")], **{CONF_OPEN_ON_ARM: "block"}),
+    )
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(
+            "alarm_control_panel", "alarm_arm_away", {"entity_id": eid}, blocking=True
+        )
+    assert _state(hass, eid) == "disarmed"
+
+
+async def test_open_on_arm_bypass_and_remonitor(hass: HomeAssistant) -> None:
+    hass.states.async_set("binary_sensor.door", "on")
+    _, eid = await _setup(
+        hass,
+        _opts(sensors=[_sensor("binary_sensor.door")], **{CONF_OPEN_ON_ARM: "bypass"}),
+    )
+    await _call(hass, "alarm_control_panel", "alarm_arm_away", {"entity_id": eid})
+    assert _state(hass, eid) == "armed_away"
+    assert "binary_sensor.door" in hass.states.get(eid).attributes["umgangene_sensoren"]
+    # Sensor wieder geschlossen -> Umgehung automatisch aufgehoben
+    hass.states.async_set("binary_sensor.door", "off")
+    await hass.async_block_till_done()
+    assert hass.states.get(eid).attributes["umgangene_sensoren"] == []
 
 
 async def test_code_required_rejects_wrong_code(hass: HomeAssistant) -> None:

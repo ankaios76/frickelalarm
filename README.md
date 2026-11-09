@@ -4,13 +4,13 @@ Eine per UI konfigurierbare **Alarmanlagen-Integration für Home Assistant** –
 Alarm-Engine (Modi, Ein-/Ausgangsverzögerung, echtes Auslösen) und Mehrbereich-Unterstützung.
 Installierbar über HACS bzw. den **Home Assistant Marketplace**.
 
-> **Status: 0.10.0 – öffentliche Beta.** Die Engine läuft inklusive **Reaktionen**, **Komfort**,
+> **Status: 0.11.0 – öffentliche Beta.** Die Engine läuft inklusive **Reaktionen**, **Komfort**,
 > einer **eigenen Lovelace-Karte** und **Konfiguration per Dienst** – damit lässt sich Frickelalarm
 > auch von einem LLM über den **Home-Assistant-MCP-Server** einrichten. Dazu eine automatisierte
 > Test-Suite, CI (hassfest + HACS + pytest) und ein eigenes Icon. Siehe [CONCEPT.md](CONCEPT.md).
 > Rückmeldungen und Tester sind ausdrücklich willkommen.
 
-## Was schon funktioniert (0.10.0)
+## Was schon funktioniert (0.11.0)
 
 - Bedienfeld (`alarm_control_panel`) mit den Modi **Zuhause / Abwesend / Nacht / Urlaub**
 - **Sensorauswahl je Modus**: pro Sensor festlegen, in welchen Modi er scharf ist
@@ -18,6 +18,12 @@ Installierbar über HACS bzw. den **Home Assistant Marketplace**.
 - **Eingangsverzögerung** (Zeit zum Unscharfschalten) für „verzögerte" Sensoren → Zustand `pending`
 - **Sofort-Sensoren** lösen ohne Verzögerung aus (z. B. Glasbruch)
 - **„Immer scharf"**-Sensoren lösen in jedem Zustand aus – auch unscharf (z. B. Rauch/Sabotage)
+- **Sabotage-/Signalverlust-Erkennung**: Meldung + Event `frickelalarm_tamper`, wenn ein Sensor
+  unerreichbar wird, während die Anlage scharf ist
+- **Offene Sensoren beim Scharfschalten**: wahlweise trotzdem scharf, offene umgehen & melden
+  (werden beim Schließen automatisch wieder überwacht) oder Scharfschalten verhindern
+- **Panik** (`frickelalarm.panic`), **Sirene verstummen** (`frickelalarm.silence`, Alarm läuft still
+  weiter) und **„Jetzt scharf"** (`frickelalarm.skip_exit_delay`)
 - **Alarmdauer**, danach automatisches Wiederschärfen in den vorherigen Modus
 - **Reaktionen im Alarmfall**: gewählte Aktoren (Sirene/Licht/Schalter) gehen bei `triggered` an
   und danach wieder aus; optionale **Benachrichtigung** je Ereignis mit frei formulierbarem Text

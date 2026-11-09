@@ -76,3 +76,15 @@ DEFAULT_AUTO_ARM_MODE = "armed_away"
 DEFAULT_AUTO_ARM_DELAY = 120
 DEFAULT_NIGHT_START = "23:00:00"
 DEFAULT_NIGHT_END = "06:30:00"
+
+# Sabotage + offene Sensoren beim Scharfschalten (Phase 9)
+CONF_TAMPER = "tamper_detection"     # Meldung, wenn ein Sensor unerreichbar wird
+CONF_OPEN_ON_ARM = "open_on_arm"     # Umgang mit offenen Sensoren beim Scharfschalten
+DEFAULT_TAMPER = True
+DEFAULT_OPEN_ON_ARM = "allow"
+OPEN_ON_ARM_OPTIONS = ["allow", "bypass", "block"]
+OPEN_ON_ARM_LABELS = {
+    "allow": "Trotzdem scharf schalten (Standard)",
+    "bypass": "Offene Sensoren umgehen & melden",
+    "block": "Scharfschalten verhindern",
+}

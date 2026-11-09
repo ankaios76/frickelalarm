@@ -20,7 +20,14 @@ from homeassistant.components.alarm_control_panel import (
     CodeFormat,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_NAME, STATE_HOME, STATE_ON
+from homeassistant.const import (
+    CONF_NAME,
+    STATE_HOME,
+    STATE_OFF,
+    STATE_ON,
+    STATE_UNAVAILABLE,
+    STATE_UNKNOWN,
+)
 from homeassistant.core import (
     Event,
     EventStateChangedData,
@@ -61,15 +68,19 @@ from .const import (
     CONF_NIGHT_REQUIRE_HOME,
     CONF_NIGHT_SCHEDULE,
     CONF_NIGHT_START,
+    CONF_OPEN_ON_ARM,
     CONF_NOTIFY_EVENTS,
     CONF_NOTIFY_MESSAGE,
     CONF_NOTIFY_SERVICE,
     CONF_PRESENCE,
     CONF_SENSORS,
     CONF_SIRENS,
+    CONF_TAMPER,
     CONF_TRIGGER_DURATION,
     DEFAULT_AUTO_ARM_DELAY,
     DEFAULT_AUTO_ARM_MODE,
+    DEFAULT_OPEN_ON_ARM,
+    DEFAULT_TAMPER,
     DEFAULT_ENTRY_DELAY,
     DEFAULT_EXIT_DELAY,
     DEFAULT_NAME,
@@ -163,6 +174,12 @@ async def async_setup_entry(
             None,
             "async_get_config",
             supports_response=SupportsResponse.ONLY,
+        )
+        # Quick-Wins
+        platform.async_register_entity_service("panic", None, "async_panic")
+        platform.async_register_entity_service("silence", None, "async_silence")
+        platform.async_register_entity_service(
+            "skip_exit_delay", None, "async_skip_exit_delay"
         )
 
 
@@ -264,6 +281,14 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
     @property
     def _night_schedule(self) -> bool:
         return bool(self._entry.options.get(CONF_NIGHT_SCHEDULE, False))
+
+    @property
+    def _tamper_enabled(self) -> bool:
+        return bool(self._entry.options.get(CONF_TAMPER, DEFAULT_TAMPER))
+
+    @property
+    def _open_on_arm(self) -> str:
+        return self._entry.options.get(CONF_OPEN_ON_ARM, DEFAULT_OPEN_ON_ARM)
 
     def _entity_label(self, entity_id: str) -> str:
         state = self.hass.states.get(entity_id)
@@ -611,6 +636,18 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
         self._notify(service, event_key)
 
     @callback
+    def _send_notification(self, service: str, message: str) -> None:
+        """Eine Benachrichtigung über den konfigurierten Dienst verschicken."""
+        name = self._entry.data.get(CONF_NAME, DEFAULT_NAME)
+        domain, _, svc = service.partition(".")
+        if not domain or not svc:
+            return
+        data = {"message": message, "title": f"Frickelalarm: {name}"}
+        self.hass.async_create_task(
+            self.hass.services.async_call(domain, svc, data, blocking=False)
+        )
+
+    @callback
     def _notify(self, service: str, event_key: str) -> None:
         name = self._entry.data.get(CONF_NAME, DEFAULT_NAME)
         tmpl = str(
@@ -624,35 +661,69 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
         except Exception:  # noqa: BLE001 - Vorlage soll nie den Alarm blockieren
             _LOGGER.warning("Frickelalarm: Nachrichtenvorlage fehlerhaft", exc_info=True)
             message = tmpl
-        title = f"Frickelalarm: {name}"
+        self._send_notification(service, message)
 
-        domain, _, svc = service.partition(".")
-        if not domain or not svc:
-            return
-        if domain == "persistent_notification":
-            data: dict = {"message": message, "title": title}
-        else:
-            data = {"message": message, "title": title}
-        self.hass.async_create_task(
-            self.hass.services.async_call(domain, svc, data, blocking=False)
+    @callback
+    def _tamper(self, sensor_name: str) -> None:
+        """Sabotage/Signalverlust: Sensor ist unerreichbar geworden."""
+        _LOGGER.warning("Frickelalarm: Sensor nicht erreichbar: %s", sensor_name)
+        self.hass.bus.async_fire(
+            f"{DOMAIN}_tamper",
+            {
+                "entity_id": self.entity_id,
+                "name": self._entry.data.get(CONF_NAME, DEFAULT_NAME),
+                "sensor": sensor_name,
+            },
         )
+        service = str(self._entry.options.get(CONF_NOTIFY_SERVICE, "") or "").strip()
+        if service:
+            self._send_notification(
+                service, f"Sabotage/Signalverlust: {sensor_name} ist nicht erreichbar"
+            )
 
     # --- Sensor-Logik -----------------------------------------------------
     @callback
     def _sensor_changed(self, event: Event[EventStateChangedData]) -> None:
+        entity_id = event.data["entity_id"]
         new_state = event.data["new_state"]
         old_state = event.data["old_state"]
-        if new_state is None or new_state.state != STATE_ON:
-            return
-        if old_state is not None and old_state.state == STATE_ON:
-            return  # war schon aktiv – keine neue Flanke
-
-        entity_id = event.data["entity_id"]
         cfg = next(
             (s for s in self._sensors if s[CONF_ENTITY_ID] == entity_id), None
         )
         if cfg is None:
             return
+
+        # Sabotage/Signalverlust: erreichbar -> unerreichbar, während scharf
+        if (
+            self._tamper_enabled
+            and self._attr_alarm_state != AlarmControlPanelState.DISARMED
+        ):
+            was_avail = old_state is not None and old_state.state not in (
+                STATE_UNAVAILABLE,
+                STATE_UNKNOWN,
+            )
+            now_unavail = new_state is None or new_state.state in (
+                STATE_UNAVAILABLE,
+                STATE_UNKNOWN,
+            )
+            if was_avail and now_unavail:
+                self._tamper(
+                    old_state.name if old_state and old_state.name else entity_id
+                )
+
+        # Auto-Re-Monitor: umgangener Sensor wieder geschlossen -> Umgehung aufheben
+        if (
+            new_state is not None
+            and new_state.state == STATE_OFF
+            and entity_id in self._bypassed
+        ):
+            self._bypassed.discard(entity_id)
+            self.async_write_ha_state()
+
+        if new_state is None or new_state.state != STATE_ON:
+            return
+        if old_state is not None and old_state.state == STATE_ON:
+            return  # war schon aktiv – keine neue Flanke
 
         name = new_state.name or entity_id
         state = self._attr_alarm_state
@@ -703,8 +774,47 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
                 translation_domain=DOMAIN, translation_key="invalid_code"
             )
 
+    @callback
+    def _open_active_sensors(self, target: AlarmControlPanelState) -> list[str]:
+        """Konfigurierte, im Zielmodus scharfe Sensoren, die gerade offen sind."""
+        mode = target.value
+        open_ids: list[str] = []
+        for cfg in self._sensors:
+            if cfg.get(CONF_ALWAYS):
+                continue
+            if mode not in cfg.get(CONF_MODES, []):
+                continue
+            eid = cfg[CONF_ENTITY_ID]
+            st = self.hass.states.get(eid)
+            if st is not None and st.state == STATE_ON:
+                open_ids.append(eid)
+        return open_ids
+
     async def _arm(self, target: AlarmControlPanelState, code: str | None) -> None:
         self._validate(code, self.code_arm_required)
+
+        # Offene Sensoren beim Scharfschalten behandeln
+        open_ids = self._open_active_sensors(target)
+        if open_ids:
+            names = ", ".join(self._entity_label(e) for e in open_ids)
+            handling = self._open_on_arm
+            if handling == "block":
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN,
+                    translation_key="sensors_open",
+                    translation_placeholders={"sensors": names},
+                )
+            if handling == "bypass":
+                for eid in open_ids:
+                    self._bypassed.add(eid)
+                service = str(
+                    self._entry.options.get(CONF_NOTIFY_SERVICE, "") or ""
+                ).strip()
+                if service:
+                    self._send_notification(
+                        service, f"Beim Scharfschalten umgangen (offen): {names}"
+                    )
+
         self._clear_timers()
         self._arm_mode = target
         self._reason = None
@@ -808,6 +918,29 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
 
     async def async_alarm_trigger(self, code: str | None = None) -> None:
         self._trigger("manuell ausgelöst")
+
+    # --- Quick-Wins (Phase 9) --------------------------------------------
+    async def async_panic(self) -> None:
+        """Sofortiger Alarm, unabhängig vom Modus."""
+        self._trigger("Panik ausgelöst")
+
+    async def async_silence(self) -> None:
+        """Sirene/Aktoren ausschalten – der Alarm läuft (still) weiter."""
+        sirens = self._entry.options.get(CONF_SIRENS) or []
+        if sirens and self._attr_alarm_state == AlarmControlPanelState.TRIGGERED:
+            self.hass.async_create_task(
+                self.hass.services.async_call(
+                    "homeassistant", "turn_off", {"entity_id": sirens}, blocking=False
+                )
+            )
+
+    async def async_skip_exit_delay(self) -> None:
+        """Laufende Ausgangsverzögerung sofort beenden (jetzt scharf)."""
+        if self._attr_alarm_state == AlarmControlPanelState.ARMING:
+            if self._cancel_arming is not None:
+                self._cancel_arming()
+                self._cancel_arming = None
+            self._finish_arming_now()
 
     # --- Komfort-Dienste (Phase 4) ---------------------------------------
     async def async_bypass(self, sensors: list[str]) -> None:
@@ -927,6 +1060,8 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
             "entry_delay": self._entry_delay,
             "trigger_duration": self._trigger_duration,
             "code_set": bool(self._code),
+            "tamper_detection": self._tamper_enabled,
+            "open_on_arm": self._open_on_arm,
             "sensors": self._sensors,
             "sirens": o.get(CONF_SIRENS) or [],
             "notify_service": o.get(CONF_NOTIFY_SERVICE, ""),
