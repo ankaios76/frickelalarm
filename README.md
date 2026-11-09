@@ -4,12 +4,13 @@ Eine per UI konfigurierbare **Alarmanlagen-Integration für Home Assistant** –
 Alarm-Engine (Modi, Ein-/Ausgangsverzögerung, echtes Auslösen) und Mehrbereich-Unterstützung.
 Installierbar über HACS bzw. den **Home Assistant Marketplace**.
 
-> **Status: 0.4.0 – öffentliche Beta.** Die Engine läuft inklusive **Reaktionen** und **Komfort**:
+> **Status: 0.5.0 – öffentliche Beta.** Die Engine läuft inklusive **Reaktionen** und **Komfort**:
 > Sensoren je Modus, Verzögerungen, Alarm auslösen, Sirene/Licht schalten, benachrichtigen,
-> Sensoren per Dienst ausklammern (Bypass) und Logbuch-Events. Siehe [CONCEPT.md](CONCEPT.md).
+> Sensoren per Dienst ausklammern (Bypass) und Logbuch-Events. Dazu eine automatisierte
+> Test-Suite, CI (hassfest + HACS + pytest) und ein eigenes Icon. Siehe [CONCEPT.md](CONCEPT.md).
 > Rückmeldungen und Tester sind ausdrücklich willkommen.
 
-## Was schon funktioniert (0.4.0)
+## Was schon funktioniert (0.5.0)
 
 - Bedienfeld (`alarm_control_panel`) mit den Modi **Zuhause / Abwesend / Nacht / Urlaub**
 - **Sensorauswahl je Modus**: pro Sensor festlegen, in welchen Modi er scharf ist
@@ -29,9 +30,16 @@ Installierbar über HACS bzw. den **Home Assistant Marketplace**.
 - **Sensor- und Aktoren-Übersicht** als Attribute (Live-Zustand, Modi, umgangene Sensoren an einem Ort)
 - Zustand übersteht Neustarts
 
+## Qualität
+
+- **Tests**: pytest-Suite (pytest-homeassistant-custom-component) für Config-Flow und Engine
+- **CI**: GitHub Actions mit `hassfest`, HACS-Validierung und `pytest`
+- **Icon/Logo** im `brand/`-Ordner (Frickelfabrik-Look)
+
 ## Was noch kommt
 
-- Tests/CI, Brands-Eintrag, Aufnahme in die Marketplace-Default-Liste (Phase 5)
+- Eintrag im `home-assistant/brands`-Repo, damit das Icon auch in der HA-Oberfläche
+  erscheint, und Aufnahme in die Marketplace-Default-Liste
 - eigene Lovelace-Karte im Frickelfabrik-Look (später)
 
 ## Installation über HACS / Marketplace (Custom Repository)
