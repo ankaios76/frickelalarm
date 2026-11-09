@@ -21,7 +21,14 @@ from homeassistant.components.alarm_control_panel import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_NAME, STATE_ON
-from homeassistant.core import Event, EventStateChangedData, HomeAssistant, callback
+from homeassistant.core import (
+    Event,
+    EventStateChangedData,
+    HomeAssistant,
+    ServiceResponse,
+    SupportsResponse,
+    callback,
+)
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv, entity_platform
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -35,6 +42,7 @@ from homeassistant.helpers.template import Template
 import homeassistant.util.dt as dt_util
 
 from .const import (
+    ARM_MODES,
     CONF_ALWAYS,
     CONF_CODE,
     CONF_CODE_ARM_REQUIRED,
@@ -56,6 +64,7 @@ from .const import (
     DEFAULT_NOTIFY_MESSAGE,
     DEFAULT_TRIGGER_DURATION,
     DOMAIN,
+    NOTIFY_EVENTS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -88,6 +97,49 @@ async def async_setup_entry(
             "clear_bypass",
             {vol.Optional("sensors"): vol.All(cv.ensure_list, [cv.entity_id])},
             "async_clear_bypass",
+        )
+        # Konfiguration per Dienst (für UI-Automationen und LLM/MCP-Zugriff)
+        platform.async_register_entity_service(
+            "add_sensor",
+            {
+                vol.Required("sensor"): cv.entity_id,
+                vol.Optional("modes"): vol.All(cv.ensure_list, [vol.In(ARM_MODES)]),
+                vol.Optional("delayed"): cv.boolean,
+                vol.Optional("always"): cv.boolean,
+            },
+            "async_add_sensor",
+        )
+        platform.async_register_entity_service(
+            "remove_sensor",
+            {vol.Required("sensor"): cv.entity_id},
+            "async_remove_sensor",
+        )
+        platform.async_register_entity_service(
+            "set_times",
+            {
+                vol.Optional("exit_delay"): cv.positive_int,
+                vol.Optional("entry_delay"): cv.positive_int,
+                vol.Optional("trigger_duration"): cv.positive_int,
+            },
+            "async_set_times",
+        )
+        platform.async_register_entity_service(
+            "set_reactions",
+            {
+                vol.Optional("sirens"): vol.All(cv.ensure_list, [cv.entity_id]),
+                vol.Optional("notify_service"): cv.string,
+                vol.Optional("notify_message"): cv.string,
+                vol.Optional("notify_events"): vol.All(
+                    cv.ensure_list, [vol.In(NOTIFY_EVENTS)]
+                ),
+            },
+            "async_set_reactions",
+        )
+        platform.async_register_entity_service(
+            "get_config",
+            None,
+            "async_get_config",
+            supports_response=SupportsResponse.ONLY,
         )
 
 
@@ -554,3 +606,88 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
         else:
             self._bypassed.clear()
         self.async_write_ha_state()
+
+    # --- Konfiguration per Dienst (Phase 7, auch für LLM/MCP) -------------
+    @callback
+    def _update_options(self, changes: dict[str, Any]) -> None:
+        """Optionen ändern und Eintrag neu laden (über den Update-Listener)."""
+        new_options = {**self._entry.options, **changes}
+        self.hass.config_entries.async_update_entry(self._entry, options=new_options)
+
+    async def async_add_sensor(
+        self,
+        sensor: str,
+        modes: list[str] | None = None,
+        delayed: bool = False,
+        always: bool = False,
+    ) -> None:
+        """Einen Sensor hinzufügen oder (bei gleicher entity_id) aktualisieren."""
+        sensors = [dict(s) for s in self._sensors if s[CONF_ENTITY_ID] != sensor]
+        sensors.append(
+            {
+                CONF_ENTITY_ID: sensor,
+                CONF_MODES: list(modes) if modes else list(ARM_MODES),
+                CONF_DELAYED: bool(delayed),
+                CONF_ALWAYS: bool(always),
+            }
+        )
+        self._update_options({CONF_SENSORS: sensors})
+
+    async def async_remove_sensor(self, sensor: str) -> None:
+        """Einen Sensor entfernen."""
+        sensors = [s for s in self._sensors if s[CONF_ENTITY_ID] != sensor]
+        self._update_options({CONF_SENSORS: sensors})
+
+    async def async_set_times(
+        self,
+        exit_delay: int | None = None,
+        entry_delay: int | None = None,
+        trigger_duration: int | None = None,
+    ) -> None:
+        """Verzögerungen und Alarmdauer setzen (nur angegebene Werte)."""
+        changes: dict[str, Any] = {}
+        if exit_delay is not None:
+            changes[CONF_EXIT_DELAY] = int(exit_delay)
+        if entry_delay is not None:
+            changes[CONF_ENTRY_DELAY] = int(entry_delay)
+        if trigger_duration is not None:
+            changes[CONF_TRIGGER_DURATION] = int(trigger_duration)
+        if changes:
+            self._update_options(changes)
+
+    async def async_set_reactions(
+        self,
+        sirens: list[str] | None = None,
+        notify_service: str | None = None,
+        notify_message: str | None = None,
+        notify_events: list[str] | None = None,
+    ) -> None:
+        """Reaktionen setzen (nur angegebene Werte)."""
+        changes: dict[str, Any] = {}
+        if sirens is not None:
+            changes[CONF_SIRENS] = list(sirens)
+        if notify_service is not None:
+            changes[CONF_NOTIFY_SERVICE] = notify_service
+        if notify_message is not None:
+            changes[CONF_NOTIFY_MESSAGE] = notify_message
+        if notify_events is not None:
+            changes[CONF_NOTIFY_EVENTS] = list(notify_events)
+        if changes:
+            self._update_options(changes)
+
+    async def async_get_config(self) -> ServiceResponse:
+        """Aktuelle Konfiguration zurückgeben (für LLM/MCP und Automationen)."""
+        o = self._entry.options
+        return {
+            "name": self._entry.data.get(CONF_NAME, DEFAULT_NAME),
+            "state": self._attr_alarm_state.value if self._attr_alarm_state else None,
+            "exit_delay": self._exit_delay,
+            "entry_delay": self._entry_delay,
+            "trigger_duration": self._trigger_duration,
+            "code_set": bool(self._code),
+            "sensors": self._sensors,
+            "sirens": o.get(CONF_SIRENS) or [],
+            "notify_service": o.get(CONF_NOTIFY_SERVICE, ""),
+            "notify_events": o.get(CONF_NOTIFY_EVENTS) or [],
+            "bypassed": sorted(self._bypassed),
+        }

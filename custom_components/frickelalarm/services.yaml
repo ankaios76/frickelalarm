@@ -27,3 +27,112 @@ clear_bypass:
             - binary_sensor
             - input_boolean
           multiple: true
+
+add_sensor:
+  target:
+    entity:
+      integration: frickelalarm
+      domain: alarm_control_panel
+  fields:
+    sensor:
+      required: true
+      selector:
+        entity:
+          domain:
+            - binary_sensor
+            - input_boolean
+    modes:
+      selector:
+        select:
+          multiple: true
+          options:
+            - armed_home
+            - armed_away
+            - armed_night
+            - armed_vacation
+    delayed:
+      selector:
+        boolean:
+    always:
+      selector:
+        boolean:
+
+remove_sensor:
+  target:
+    entity:
+      integration: frickelalarm
+      domain: alarm_control_panel
+  fields:
+    sensor:
+      required: true
+      selector:
+        entity:
+          domain:
+            - binary_sensor
+            - input_boolean
+
+set_times:
+  target:
+    entity:
+      integration: frickelalarm
+      domain: alarm_control_panel
+  fields:
+    exit_delay:
+      selector:
+        number:
+          min: 0
+          max: 600
+          mode: box
+          unit_of_measurement: s
+    entry_delay:
+      selector:
+        number:
+          min: 0
+          max: 600
+          mode: box
+          unit_of_measurement: s
+    trigger_duration:
+      selector:
+        number:
+          min: 0
+          max: 600
+          mode: box
+          unit_of_measurement: s
+
+set_reactions:
+  target:
+    entity:
+      integration: frickelalarm
+      domain: alarm_control_panel
+  fields:
+    sirens:
+      selector:
+        entity:
+          domain:
+            - switch
+            - siren
+            - light
+            - input_boolean
+          multiple: true
+    notify_service:
+      selector:
+        text:
+    notify_message:
+      selector:
+        text:
+          multiline: true
+    notify_events:
+      selector:
+        select:
+          multiple: true
+          options:
+            - triggered
+            - pending
+            - armed
+            - disarmed
+
+get_config:
+  target:
+    entity:
+      integration: frickelalarm
+      domain: alarm_control_panel

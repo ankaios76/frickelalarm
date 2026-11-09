@@ -93,6 +93,46 @@
           "description": "Only re-arm these sensors (empty = all)."
         }
       }
+    },
+    "add_sensor": {
+      "name": "Add sensor",
+      "description": "Adds a sensor to the alarm or updates it (same entity_id). For UI automations and LLM/MCP access.",
+      "fields": {
+        "sensor": { "name": "Sensor", "description": "Door/window contact, motion detector, etc." },
+        "modes": { "name": "Modes", "description": "Which modes the sensor is armed in (default: all)." },
+        "delayed": { "name": "Delayed", "description": "Uses the entry delay." },
+        "always": { "name": "Always armed", "description": "Triggers in any state (e.g. smoke/tamper)." }
+      }
+    },
+    "remove_sensor": {
+      "name": "Remove sensor",
+      "description": "Removes a sensor from the alarm.",
+      "fields": {
+        "sensor": { "name": "Sensor", "description": "The sensor to remove." }
+      }
+    },
+    "set_times": {
+      "name": "Set times",
+      "description": "Sets exit/entry delay and alarm duration in seconds (only the values given).",
+      "fields": {
+        "exit_delay": { "name": "Exit delay", "description": "Seconds to leave after arming." },
+        "entry_delay": { "name": "Entry delay", "description": "Seconds to disarm before full alarm." },
+        "trigger_duration": { "name": "Alarm duration", "description": "Seconds, then re-arms." }
+      }
+    },
+    "set_reactions": {
+      "name": "Set reactions",
+      "description": "Sets the actors on alarm and the notification (only the values given).",
+      "fields": {
+        "sirens": { "name": "Actors", "description": "Siren/light/switch to turn on during alarm and off afterwards." },
+        "notify_service": { "name": "Notification service", "description": "e.g. notify.mobile_app_… or persistent_notification.create." },
+        "notify_message": { "name": "Message text", "description": "Text; {{ name }}, {{ reason }}, {{ event }} available." },
+        "notify_events": { "name": "Events", "description": "Which events trigger a notification." }
+      }
+    },
+    "get_config": {
+      "name": "Get configuration",
+      "description": "Returns the current configuration of the area (sensors, times, reactions, state) – ideal for LLM/MCP access."
     }
   },
   "exceptions": {

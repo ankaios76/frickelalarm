@@ -102,6 +102,8 @@ Damit es in HACS (und ggf. in die HACS-Default-Liste) kann:
 - **P5 – Qualität & HACS** ✅ (0.5.0): pytest-Suite (pytest-homeassistant-custom-component), CI mit hassfest + HACS + pytest, Brand-Icon/Logo im `brand/`-Ordner (HACS-brands-Check bestanden). Offen: PR an `home-assistant/brands` fürs HA-UI-Icon + Aufnahme in HACS-Default.
 - **P6 – (optional)**: Lovelace-Karte im Frickelfabrik-Look ✅ (0.6.0, `custom:frickelalarm-card`, von der Integration ausgeliefert + registriert). Offen: Einreichung HACS-Default + `home-assistant/brands`-PR.
 
+- **P7 – Konfiguration per Dienst / MCP** ✅ (0.7.0): `add_sensor`, `remove_sensor`, `set_times`, `set_reactions`, `get_config` (Response) als Entity-Dienste. Dadurch per LLM über den HA-MCP-Server einrichtbar – bewusster Unterschied zu Alarmo (Tester-Feedback).
+
 ## 9. Getroffene Entscheidungen (2026-11-07)
 - **Name/Domain**: `frickelalarm` – festgelegt.
 - **Mehrere Bereiche/Partitionen**: **ja**, von Anfang an mitdenken. Umsetzung: **1 Config-Entry = 1 Bereich/Panel**

@@ -174,6 +174,44 @@ async def test_event_fired_with_reason(hass: HomeAssistant) -> None:
     assert events[0].data["mode"] == "armed_away"
 
 
+async def test_config_services(hass: HomeAssistant) -> None:
+    hass.states.async_set("binary_sensor.motion", "off")
+    entry, eid = await _setup(hass, _opts())
+
+    # get_config liefert den aktuellen Stand
+    resp = await hass.services.async_call(
+        DOMAIN, "get_config", {"entity_id": eid}, blocking=True, return_response=True
+    )
+    assert resp[eid]["sensors"] == []
+    assert resp[eid]["exit_delay"] == 0
+
+    # add_sensor schreibt in die Optionen
+    await _call(
+        hass,
+        DOMAIN,
+        "add_sensor",
+        {"entity_id": eid, "sensor": "binary_sensor.motion", "modes": ["armed_away"]},
+    )
+    assert any(s["entity_id"] == "binary_sensor.motion" for s in entry.options["sensors"])
+
+    # set_times schreibt in die Optionen
+    await _call(hass, DOMAIN, "set_times", {"entity_id": eid, "exit_delay": 0})
+    assert entry.options["exit_delay"] == 0
+
+    # der per Dienst hinzugefügte Sensor ist nach dem Reload wirklich aktiv
+    await _call(hass, "alarm_control_panel", "alarm_arm_away", {"entity_id": eid})
+    assert _state(hass, eid) == "armed_away"
+    hass.states.async_set("binary_sensor.motion", "on")
+    await hass.async_block_till_done()
+    assert _state(hass, eid) == "triggered"
+
+    await _call(hass, "alarm_control_panel", "alarm_disarm", {"entity_id": eid})
+    await _call(
+        hass, DOMAIN, "remove_sensor", {"entity_id": eid, "sensor": "binary_sensor.motion"}
+    )
+    assert entry.options["sensors"] == []
+
+
 async def test_code_required_rejects_wrong_code(hass: HomeAssistant) -> None:
     _, eid = await _setup(
         hass, _opts(**{CONF_CODE: "1234", CONF_CODE_ARM_REQUIRED: True})

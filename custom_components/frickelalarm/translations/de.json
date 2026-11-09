@@ -93,6 +93,46 @@
           "description": "Nur diese Sensoren wieder scharf schalten (leer = alle)."
         }
       }
+    },
+    "add_sensor": {
+      "name": "Sensor hinzufügen",
+      "description": "Fügt einen Sensor zur Anlage hinzu oder aktualisiert ihn (bei gleicher entity_id). Für UI-Automationen und LLM-/MCP-Zugriff.",
+      "fields": {
+        "sensor": { "name": "Sensor", "description": "Tür-/Fensterkontakt, Bewegungsmelder usw." },
+        "modes": { "name": "Modi", "description": "In welchen Modi der Sensor scharf ist (Standard: alle)." },
+        "delayed": { "name": "Verzögert", "description": "Nutzt die Eingangsverzögerung." },
+        "always": { "name": "Immer scharf", "description": "Löst in jedem Zustand aus (z. B. Rauch/Sabotage)." }
+      }
+    },
+    "remove_sensor": {
+      "name": "Sensor entfernen",
+      "description": "Entfernt einen Sensor aus der Anlage.",
+      "fields": {
+        "sensor": { "name": "Sensor", "description": "Der zu entfernende Sensor." }
+      }
+    },
+    "set_times": {
+      "name": "Zeiten einstellen",
+      "description": "Setzt Ausgangs-/Eingangsverzögerung und Alarmdauer in Sekunden (nur angegebene Werte).",
+      "fields": {
+        "exit_delay": { "name": "Ausgangsverzögerung", "description": "Sekunden zum Verlassen beim Scharfschalten." },
+        "entry_delay": { "name": "Eingangsverzögerung", "description": "Sekunden zum Unscharfschalten vor Vollalarm." },
+        "trigger_duration": { "name": "Alarmdauer", "description": "Sekunden, danach wird wieder scharf geschaltet." }
+      }
+    },
+    "set_reactions": {
+      "name": "Reaktionen einstellen",
+      "description": "Setzt Aktoren bei Alarm und die Benachrichtigung (nur angegebene Werte).",
+      "fields": {
+        "sirens": { "name": "Aktoren", "description": "Sirene/Licht/Schalter, die bei Alarm an- und danach ausgehen." },
+        "notify_service": { "name": "Benachrichtigungsdienst", "description": "z. B. notify.mobile_app_… oder persistent_notification.create." },
+        "notify_message": { "name": "Nachrichtentext", "description": "Text; {{ name }}, {{ reason }}, {{ event }} nutzbar." },
+        "notify_events": { "name": "Ereignisse", "description": "Bei welchen Ereignissen benachrichtigt wird." }
+      }
+    },
+    "get_config": {
+      "name": "Konfiguration abrufen",
+      "description": "Gibt die aktuelle Konfiguration des Bereichs zurück (Sensoren, Zeiten, Reaktionen, Zustand) – ideal für LLM-/MCP-Zugriff."
     }
   },
   "exceptions": {

@@ -4,12 +4,13 @@ Eine per UI konfigurierbare **Alarmanlagen-Integration für Home Assistant** –
 Alarm-Engine (Modi, Ein-/Ausgangsverzögerung, echtes Auslösen) und Mehrbereich-Unterstützung.
 Installierbar über HACS bzw. den **Home Assistant Marketplace**.
 
-> **Status: 0.6.0 – öffentliche Beta.** Die Engine läuft inklusive **Reaktionen**, **Komfort** und
-> einer **eigenen Lovelace-Karte** im Frickelfabrik-Look. Dazu eine automatisierte Test-Suite,
-> CI (hassfest + HACS + pytest) und ein eigenes Icon. Siehe [CONCEPT.md](CONCEPT.md).
+> **Status: 0.7.0 – öffentliche Beta.** Die Engine läuft inklusive **Reaktionen**, **Komfort**,
+> einer **eigenen Lovelace-Karte** und **Konfiguration per Dienst** – damit lässt sich Frickelalarm
+> auch von einem LLM über den **Home-Assistant-MCP-Server** einrichten. Dazu eine automatisierte
+> Test-Suite, CI (hassfest + HACS + pytest) und ein eigenes Icon. Siehe [CONCEPT.md](CONCEPT.md).
 > Rückmeldungen und Tester sind ausdrücklich willkommen.
 
-## Was schon funktioniert (0.6.0)
+## Was schon funktioniert (0.7.0)
 
 - Bedienfeld (`alarm_control_panel`) mit den Modi **Zuhause / Abwesend / Nacht / Urlaub**
 - **Sensorauswahl je Modus**: pro Sensor festlegen, in welchen Modi er scharf ist
@@ -29,6 +30,8 @@ Installierbar über HACS bzw. den **Home Assistant Marketplace**.
 - **Sensor- und Aktoren-Übersicht** als Attribute (Live-Zustand, Modi, umgangene Sensoren an einem Ort)
 - **Eigene Lovelace-Karte** (`custom:frickelalarm-card`) im Frickelfabrik-Look – wird von der
   Integration automatisch mit ausgeliefert und registriert (keine manuelle Ressource nötig)
+- **Konfiguration per Dienst** (`add_sensor`, `remove_sensor`, `set_times`, `set_reactions`,
+  `get_config`) – damit auch per LLM über den Home-Assistant-MCP-Server einrichtbar
 - Zustand übersteht Neustarts
 
 ## Qualität
@@ -36,6 +39,29 @@ Installierbar über HACS bzw. den **Home Assistant Marketplace**.
 - **Tests**: pytest-Suite (pytest-homeassistant-custom-component) für Config-Flow und Engine
 - **CI**: GitHub Actions mit `hassfest`, HACS-Validierung und `pytest`
 - **Icon/Logo** im `brand/`-Ordner (Frickelfabrik-Look)
+
+## Konfiguration per Dienst / MCP
+
+Neben dem UI-Options-Flow lässt sich alles über Dienste einstellen – im Gegensatz zu vielen
+anderen Lösungen also auch von einem LLM über den **Home-Assistant-MCP-Server** steuerbar:
+
+- `frickelalarm.add_sensor` / `frickelalarm.remove_sensor`
+- `frickelalarm.set_times` (Ein-/Ausgangsverzögerung, Alarmdauer)
+- `frickelalarm.set_reactions` (Aktoren, Benachrichtigung)
+- `frickelalarm.get_config` (liefert den aktuellen Stand zurück)
+- `frickelalarm.bypass` / `frickelalarm.clear_bypass`
+
+Alle Dienste zielen auf die Bereichs-Entität (`alarm_control_panel.…`). Beispiel:
+
+```yaml
+action: frickelalarm.add_sensor
+target:
+  entity_id: alarm_control_panel.haus_frickelalarm
+data:
+  sensor: binary_sensor.tuer_eingang
+  modes: [armed_away, armed_night]
+  delayed: true
+```
 
 ## Lovelace-Karte
 
