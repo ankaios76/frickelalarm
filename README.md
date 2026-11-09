@@ -1,6 +1,8 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/ankaios76/frickelalarm/main/docs/header.png" width="720" alt="Frickelalarm – Alarmanlage für Home Assistant, powered by Frickelfabrik">
+  <img src="https://raw.githubusercontent.com/ankaios76/frickelalarm/main/docs/header.png" width="720" alt="Frickelalarm – Alarm system for Home Assistant, powered by Frickelfabrik">
 </p>
+
+<p align="center"><b>English</b> · <a href="README.de.md">Deutsch</a></p>
 
 <p align="center">
   <img alt="HACS Custom" src="https://img.shields.io/badge/HACS-Custom-1f3b39?style=flat-square">
@@ -11,178 +13,177 @@
 </p>
 
 <p align="center">
-  <b>Eine vollwertige Alarmanlage für Home Assistant – per Oberfläche eingerichtet, per Dienst (und damit per LLM über MCP) steuerbar.</b><br>
-  Ausführliche Doku: <a href="https://frickelfabrik.de/blog/frickelalarm-doku/">Deutsch</a> · <a href="https://frickelfabrik.de/blog/frickelalarm-doku-en/">English</a>
+  <b>A full alarm system for Home Assistant – set up through the UI, controllable through services (and therefore by an LLM via MCP).</b><br>
+  Detailed docs: <a href="https://frickelfabrik.de/blog/frickelalarm-doku-en/">English</a> · <a href="https://frickelfabrik.de/blog/frickelalarm-doku/">Deutsch</a>
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/ankaios76/frickelalarm/main/docs/card.png" width="360" alt="Die Frickelalarm-Karte im Dashboard">
+  <img src="https://raw.githubusercontent.com/ankaios76/frickelalarm/main/docs/card.png" width="360" alt="The Frickelalarm card on a dashboard">
 </p>
 
-> **Status: 0.11.0 – öffentliche Beta.** Engine mit Reaktionen und Komfort, Präsenz-/Zeit-Automatik,
-> eigene Lovelace-Karte und Sabotage-Erkennung – und als Einziges **per Dienst/LLM (MCP)
-> konfigurierbar**. Automatisierte Test-Suite und CI (hassfest + HACS + pytest). Siehe
-> [CONCEPT.md](CONCEPT.md). Rückmeldungen und Tester sind ausdrücklich willkommen.
+> **Status: 0.11.0 – public beta.** Engine with reactions and convenience features, presence/time
+> automation, its own Lovelace card and tamper detection – and, uniquely, **configurable through
+> services / an LLM (MCP)**. Automated test suite and CI (hassfest + HACS + pytest). See
+> [CONCEPT.md](CONCEPT.md) (German). Feedback and testers are very welcome.
 
-## Was schon funktioniert (0.11.0)
+## What already works (0.11.0)
 
-- Bedienfeld (`alarm_control_panel`) mit den Modi **Zuhause / Abwesend / Nacht / Urlaub**
-- **Sensorauswahl je Modus**: pro Sensor festlegen, in welchen Modi er scharf ist
-- **Ausgangsverzögerung** (Zeit zum Verlassen) → Zustand `arming`
-- **Eingangsverzögerung** (Zeit zum Unscharfschalten) für „verzögerte" Sensoren → Zustand `pending`
-- **Sofort-Sensoren** lösen ohne Verzögerung aus (z. B. Glasbruch)
-- **„Immer scharf"**-Sensoren lösen in jedem Zustand aus – auch unscharf (z. B. Rauch/Sabotage)
-- **Sabotage-/Signalverlust-Erkennung**: Meldung + Event `frickelalarm_tamper`, wenn ein Sensor
-  unerreichbar wird, während die Anlage scharf ist
-- **Offene Sensoren beim Scharfschalten**: wahlweise trotzdem scharf, offene umgehen & melden
-  (werden beim Schließen automatisch wieder überwacht) oder Scharfschalten verhindern
-- **Panik** (`frickelalarm.panic`), **Sirene verstummen** (`frickelalarm.silence`, Alarm läuft still
-  weiter) und **„Jetzt scharf"** (`frickelalarm.skip_exit_delay`)
-- **Alarmdauer**, danach automatisches Wiederschärfen in den vorherigen Modus
-- **Reaktionen im Alarmfall**: gewählte Aktoren (Sirene/Licht/Schalter) gehen bei `triggered` an
-  und danach wieder aus; optionale **Benachrichtigung** je Ereignis mit frei formulierbarem Text
-- optionaler **Code/PIN**, getrennt für Scharf- und/oder Unscharfschalten
-- **Mehrere Bereiche/Partitionen**: ein Eintrag = ein Bereich
-- **Bypass**: Sensoren per Dienst (`frickelalarm.bypass` / `clear_bypass`) temporär ausklammern
-  (gilt bis zum nächsten Unscharfschalten; „immer scharf"-Sensoren sind davon ausgenommen)
-- **Logbuch-Events** für Automationen: `frickelalarm_armed/arming/pending/triggered/disarmed`
-  (mit Bereich, Modus, Auslöser)
-- **Sensor- und Aktoren-Übersicht** als Attribute (Live-Zustand, Modi, umgangene Sensoren an einem Ort)
-- **Eigene Lovelace-Karte** (`custom:frickelalarm-card`) im Frickelfabrik-Look – wird von der
-  Integration automatisch mit ausgeliefert und registriert (keine manuelle Ressource nötig);
-  mit aktiver Modus-Hervorhebung, Countdown und optionalem **Zahlen-Tastenfeld**
-- **Automatik**: **Auto-scharf**, wenn alle gewählten Personen weg sind (mit Verzögerung),
-  **Auto-unscharf** bei Heimkehr der ersten Person, und **Nachtmodus nach Zeitplan**
-- **Konfiguration per Dienst** (`add_sensor`, `remove_sensor`, `set_times`, `set_reactions`,
-  `set_automation`, `get_config`) – damit auch per LLM über den Home-Assistant-MCP-Server einrichtbar
-- Zustand übersteht Neustarts
+- Control panel (`alarm_control_panel`) with the modes **Home / Away / Night / Vacation**
+- **Per-mode sensor selection**: decide for each sensor which modes it is armed in
+- **Exit delay** (time to leave) → state `arming`
+- **Entry delay** (time to disarm) for "delayed" sensors → state `pending`
+- **Instant sensors** trigger without a delay (e.g. glass break)
+- **"Always armed"** sensors trigger in any state – even when disarmed (e.g. smoke/tamper)
+- **Tamper / signal-loss detection**: notification + `frickelalarm_tamper` event when a sensor
+  becomes unavailable while the system is armed
+- **Open sensors when arming**: arm anyway, bypass & report (re-monitored automatically once closed),
+  or block arming
+- **Panic** (`frickelalarm.panic`), **silence siren** (`frickelalarm.silence`, alarm keeps running
+  silently) and **"arm now"** (`frickelalarm.skip_exit_delay`)
+- **Alarm duration**, then automatic re-arming to the previous mode
+- **Reactions on alarm**: chosen actors (siren/light/switch) turn on at `triggered` and off again
+  afterwards; optional **notification** per event with a freely worded message
+- optional **code/PIN**, separately for arming and/or disarming
+- **Multiple areas/partitions**: one entry = one area
+- **Bypass**: temporarily exclude sensors via service (`frickelalarm.bypass` / `clear_bypass`)
+  (until the next disarm; "always armed" sensors are exempt)
+- **Logbook events** for automations: `frickelalarm_armed/arming/pending/triggered/disarmed`
+  (with area, mode, trigger)
+- **Sensor and actor overview** as attributes (live state, modes, bypassed sensors in one place)
+- **Own Lovelace card** (`custom:frickelalarm-card`) in the Frickelfabrik look – shipped and
+  registered automatically by the integration (no manual resource needed); with active-mode
+  highlighting, countdown and an optional **number keypad**
+- **Automation**: **auto-arm** when all chosen people have left (with a delay), **auto-disarm** when
+  the first person returns, and **night mode on a schedule**
+- **Configuration through services** (`add_sensor`, `remove_sensor`, `set_times`, `set_reactions`,
+  `set_automation`, `get_config`) – so it can also be set up by an LLM via the Home Assistant MCP server
+- State survives restarts
 
-## Oberfläche
+## Interface
 
-Alles wird menügeführt über die Oberfläche eingerichtet – Code/PIN, Sensoren, Verzögerungen,
-Reaktionen und Automatik:
+Everything is set up menu-driven through the UI – code/PIN, sensors, delays, reactions and automation:
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/ankaios76/frickelalarm/main/docs/config.png" width="440" alt="Der Konfigurieren-Dialog mit allen Bereichen">
+  <img src="https://raw.githubusercontent.com/ankaios76/frickelalarm/main/docs/config.png" width="440" alt="The configuration dialog with all sections">
 </p>
 
-Und die **Automatik** nach Anwesenheit und Nachtplan:
+And the **automation** by presence and night schedule:
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/ankaios76/frickelalarm/main/docs/automatik.png" width="360" alt="Die Automatik-Einstellungen">
+  <img src="https://raw.githubusercontent.com/ankaios76/frickelalarm/main/docs/automatik.png" width="360" alt="The automation settings">
 </p>
 
-## Qualität
+> Screenshots are from a German Home Assistant; the UI follows your HA user's language.
 
-- **Tests**: pytest-Suite (pytest-homeassistant-custom-component) für Config-Flow und Engine
-- **CI**: GitHub Actions mit `hassfest`, HACS-Validierung und `pytest`
-- **Icon/Logo** im `brand/`-Ordner (Frickelfabrik-Look)
+## Quality
 
-## Automatik (Präsenz & Zeitplan)
+- **Tests**: pytest suite (pytest-homeassistant-custom-component) for the config flow and the engine
+- **CI**: GitHub Actions with `hassfest`, HACS validation and `pytest`
+- **Icon/logo** in the `brand/` folder (Frickelfabrik look)
 
-Unter **Konfigurieren → Automatik**:
+## Automation (presence & schedule)
 
-- **Auto-scharf**, wenn alle gewählten Personen/Tracker die Home-Zone verlassen haben –
-  mit einstellbarer Verzögerung und wählbarem Modus. Kommt jemand während der Verzögerung
-  zurück, wird nicht scharf geschaltet.
-- **Auto-unscharf**, sobald die erste Person heimkommt – auch während Eingangsverzögerung
-  oder laufendem Alarm.
-- **Nachtmodus nach Zeitplan** (Beginn/Ende), optional nur wenn jemand zuhause ist.
+Under **Configure → Automation**:
 
-Zur Laufzeit lassen sich die drei Schalter per Dienst `frickelalarm.set_automation` ein- und
-ausschalten (auch per LLM/MCP). Der aktuelle Stand steht im Attribut `automatik` der Entität.
+- **Auto-arm** when all chosen people/trackers have left the home zone – with an adjustable delay and
+  a selectable mode. If someone returns during the delay, the system does not arm.
+- **Auto-disarm** the moment the first person arrives – even during the entry delay or an alarm.
+- **Night mode on a schedule** (start/end), optionally only when someone is home.
 
-## Konfiguration per Dienst / MCP
+The three switches can be toggled at runtime via the `frickelalarm.set_automation` service (also via
+LLM/MCP). The current state is exposed in the entity's `automatik` attribute.
 
-Neben dem UI-Options-Flow lässt sich alles über Dienste einstellen – im Gegensatz zu vielen
-anderen Lösungen also auch von einem LLM über den **Home-Assistant-MCP-Server** steuerbar:
+## Configuration through services / MCP
+
+Besides the UI options flow, everything can be set through services – which, unlike many other
+solutions, means it can also be driven by an LLM via the **Home Assistant MCP server**:
 
 - `frickelalarm.add_sensor` / `frickelalarm.remove_sensor`
-- `frickelalarm.set_times` (Ein-/Ausgangsverzögerung, Alarmdauer)
-- `frickelalarm.set_reactions` (Aktoren, Benachrichtigung)
-- `frickelalarm.get_config` (liefert den aktuellen Stand zurück)
+- `frickelalarm.set_times` (exit/entry delay, alarm duration)
+- `frickelalarm.set_reactions` (actors, notification)
+- `frickelalarm.get_config` (returns the current state)
 - `frickelalarm.bypass` / `frickelalarm.clear_bypass`
 
-Alle Dienste zielen auf die Bereichs-Entität (`alarm_control_panel.…`). Beispiel:
+All services target the area entity (`alarm_control_panel.…`). Example:
 
 ```yaml
 action: frickelalarm.add_sensor
 target:
-  entity_id: alarm_control_panel.haus_frickelalarm
+  entity_id: alarm_control_panel.house_frickelalarm
 data:
-  sensor: binary_sensor.tuer_eingang
+  sensor: binary_sensor.front_door
   modes: [armed_away, armed_night]
   delayed: true
 ```
 
-## Lovelace-Karte
+## Lovelace card
 
-Die Karte wird automatisch registriert. Einfach eine **manuelle Karte** aufs Dashboard legen:
+The card is registered automatically. Just add a **manual card** to the dashboard:
 
 ```yaml
 type: custom:frickelalarm-card
-entity: alarm_control_panel.haus_frickelalarm
-name: Haus            # optional
-keypad: collapsible   # optional: false (Standard) | true | collapsible
+entity: alarm_control_panel.house_frickelalarm
+name: House           # optional
+keypad: collapsible   # optional: false (default) | true | collapsible
 ```
 
-Sie zeigt Zustand (farbig), Countdown bei Ein-/Ausgangsverzögerung, Auslöser, offene und
-umgangene Sensoren, die Modus-Knöpfe und – falls ein Code gesetzt ist – ein Code-Feld.
+It shows the state (in colour), a countdown during the exit/entry delays, the trigger, open and
+bypassed sensors, the mode buttons and – if a code is set – a code field.
 
-**Tastenfeld** (`keypad`): `false` = nur Textfeld (Standard), `true` = Zahlen-Tastenfeld immer
-sichtbar, `collapsible` = über einen Knopf aufklappbar. Die eingegebenen Ziffern werden beim
-Scharf-/Unscharfschalten als Code mitgeschickt.
+**Keypad** (`keypad`): `false` = text field only (default), `true` = number keypad always visible,
+`collapsible` = expandable via a button. The entered digits are sent along as the code when
+arming/disarming.
 
-## Was noch kommt
+## Roadmap
 
-- Eintrag im `home-assistant/brands`-Repo, damit das Icon auch in der HA-Oberfläche
-  erscheint, und Aufnahme in die Marketplace-Default-Liste
+- An entry in the `home-assistant/brands` repo so the icon also appears in the HA UI, and inclusion
+  in the Marketplace default list
 
-## Installation über HACS / Marketplace (Custom Repository)
+## Installation via HACS / Marketplace (custom repository)
 
-> Seit Home Assistant **2026.11** ist HACS als **Marketplace** direkt in HA eingebaut
-> (Einstellungen → Marketplace). Benutzerdefinierte Repositories funktionieren weiterhin.
+> Since Home Assistant **2026.11**, HACS is built into HA as the **Marketplace**
+> (Settings → Marketplace). Custom repositories still work.
 
-1. **Marketplace** öffnen → oben rechts das Menü (⋮) → **Benutzerdefinierte Repositories**.
-2. Repository `https://github.com/ankaios76/frickelalarm`, Kategorie **Integration**, hinzufügen.
-3. „Frickelalarm" suchen, herunterladen, **Home Assistant neu starten**.
-4. **Einstellungen → Geräte & Dienste → Integration hinzufügen → „Frickelalarm"**.
+1. Open the **Marketplace** → top-right menu (⋮) → **Custom repositories**.
+2. Add the repository `https://github.com/ankaios76/frickelalarm`, category **Integration**.
+3. Find "Frickelalarm", download it, **restart Home Assistant**.
+4. **Settings → Devices & services → Add integration → "Frickelalarm"**.
 
-## Manuelle Installation
+## Manual installation
 
-Ordner `custom_components/frickelalarm` in die Home-Assistant-Config kopieren, HA neu starten,
-dann wie oben die Integration hinzufügen.
+Copy the folder `custom_components/frickelalarm` into your Home Assistant config, restart HA, then add
+the integration as above.
 
-## Einrichten
+## Setup
 
-1. Beim Hinzufügen: **Name** des Bereichs, optional **Code/PIN**.
-2. Danach **Konfigurieren** (Zahnrad) öffnen – menügeführt:
-   - **Sensoren**: Tür-/Fensterkontakte, Bewegungsmelder … auswählen. Pro Sensor: in welchen
-     Modi scharf, „verzögert" (nutzt die Eingangsverzögerung), „immer scharf".
-   - **Verzögerungen & Alarmdauer**: Ausgangs-/Eingangsverzögerung und Alarmdauer in Sekunden.
-   - **Reaktionen**: Aktoren (Sirene/Licht/Schalter), die bei Alarm an- und danach ausgehen,
-     sowie optional ein Benachrichtigungsdienst, Nachrichtentext und die Ereignisse dafür.
-   - **Allgemein**: Code/PIN ändern.
+1. When adding it: **name** of the area, optionally a **code/PIN**.
+2. Then open **Configure** (gear icon) – menu-driven:
+   - **Sensors**: pick door/window contacts, motion detectors … Per sensor: which modes it's armed
+     in, "delayed" (uses the entry delay), "always armed".
+   - **Delays & alarm duration**: exit/entry delay and alarm duration in seconds.
+   - **Reactions**: actors (siren/light/switch) that turn on during an alarm and off afterwards, plus
+     an optional notification service, message text and the events for it.
+   - **General**: change the code/PIN.
 
-## Voraussetzungen
+## Requirements
 
-Home Assistant **2026.2** oder neuer.
+Home Assistant **2026.2** or newer.
 
-## Mitmachen
+## Get involved
 
-Das ist ein Hobby-/Lernprojekt der [Frickelfabrik](https://frickelfabrik.de). Ideen, Bug-Reports
-und Tester sind willkommen – am besten über die
-[Issues](https://github.com/ankaios76/frickelalarm/issues).
-Es gibt mit **[Alarmo](https://github.com/nielsfaber/alarmo)** bereits eine ausgereifte,
-sehr verbreitete Lösung mit ähnlichem Funktionsumfang – Frickelalarm entsteht bewusst eigen
-(Lerneffekt, volle Kontrolle, eigene Akzente).
+This is a hobby/learning project of the [Frickelfabrik](https://frickelfabrik.de). Ideas, bug reports
+and testers are welcome – best via the
+[issues](https://github.com/ankaios76/frickelalarm/issues).
+There's already **[Alarmo](https://github.com/nielsfaber/alarmo)**, a mature and very popular solution
+with a similar feature set – Frickelalarm is built from scratch on purpose (learning, full control,
+a few own touches).
 
-## Entwicklung
+## Development
 
-Repo: `~/projekte/frickelalarm`. Zum Testen `custom_components/frickelalarm` in die HA-Config
-(`/home/norbert/homeassistant/config/custom_components/`) kopieren und
-`docker restart homeassistant`. Logs: `docker logs homeassistant | grep -i frickelalarm`.
+Repo: `~/projekte/frickelalarm`. For testing, copy `custom_components/frickelalarm` into the HA config
+(`/home/norbert/homeassistant/config/custom_components/`) and run `docker restart homeassistant`.
+Logs: `docker logs homeassistant | grep -i frickelalarm`.
 
-## Lizenz
+## License
 
-MIT – siehe [LICENSE](LICENSE).
+MIT – see [LICENSE](LICENSE).
