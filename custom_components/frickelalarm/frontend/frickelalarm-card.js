@@ -21,7 +21,7 @@ const ICONS = {
   night: '<path d="M12 3a9 9 0 1 0 9 9c0-.5 0-1-.1-1.5A7 7 0 0 1 12.5 3.1 9 9 0 0 0 12 3z"/>',
   vacation: '<circle cx="12" cy="12" r="4"/><g stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5 5l1.8 1.8M17.2 17.2 19 19M19 5l-1.8 1.8M6.8 17.2 5 19"/></g>',
   disarm: '<path d="M17 9V7A5 5 0 0 0 7.1 6H9.3A3 3 0 0 1 15 7v2H6a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1z"/>',
-  key: '<path d="M14 2a6 6 0 0 0-5.7 7.9L2 16.2V21h4.8l.7-.7V18h2v-2h2l1.1-1.1A6 6 0 1 0 14 2zm2.5 5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"/>',
+  keypad: '<circle cx="6" cy="6" r="1.9"/><circle cx="12" cy="6" r="1.9"/><circle cx="18" cy="6" r="1.9"/><circle cx="6" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="18" cy="12" r="1.9"/><circle cx="6" cy="18" r="1.9"/><circle cx="12" cy="18" r="1.9"/><circle cx="18" cy="18" r="1.9"/>',
 };
 
 const ARM_BUTTONS = [
@@ -172,7 +172,7 @@ class FrickelalarmCard extends HTMLElement {
           </div>
           <button class="disarm" data-svc="alarm_disarm">${svg(ICONS.disarm)}<span>Unscharf schalten</span></button>
           ${!this._keypad && needCode ? `<input id="code" class="code" type="${a.code_format === "number" ? "tel" : "text"}" inputmode="${a.code_format === "number" ? "numeric" : "text"}" placeholder="Code / PIN" autocomplete="off"/>` : ""}
-          ${this._keypad === "collapsible" ? `<button class="kptoggle" id="kptoggle">${svg(ICONS.key)}<span>${this._kpOpen ? "Tastenfeld ausblenden" : "Code-Tastenfeld"}</span></button>` : ""}
+          ${this._keypad === "collapsible" ? `<button class="kptoggle" id="kptoggle">${svg(ICONS.keypad)}<span>${this._kpOpen ? "Tastenfeld ausblenden" : "Code-Tastenfeld"}</span></button>` : ""}
           ${showKeypad ? `<div class="kp">
               <div class="kpdisp empty" id="kpdisp">Code eingeben</div>
               <div class="kpgrid">
