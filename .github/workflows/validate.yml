@@ -22,3 +22,6 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
+          # 'brands' ist nur fuer die offizielle HACS-Default-Liste noetig (spaetere Phase),
+          # nicht fuer die Nutzung als Custom-Repository.
+          ignore: brands
