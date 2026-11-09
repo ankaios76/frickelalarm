@@ -4,13 +4,12 @@ Eine per UI konfigurierbare **Alarmanlagen-Integration für Home Assistant** –
 Alarm-Engine (Modi, Ein-/Ausgangsverzögerung, echtes Auslösen) und Mehrbereich-Unterstützung.
 Installierbar über HACS bzw. den **Home Assistant Marketplace**.
 
-> **Status: 0.5.0 – öffentliche Beta.** Die Engine läuft inklusive **Reaktionen** und **Komfort**:
-> Sensoren je Modus, Verzögerungen, Alarm auslösen, Sirene/Licht schalten, benachrichtigen,
-> Sensoren per Dienst ausklammern (Bypass) und Logbuch-Events. Dazu eine automatisierte
-> Test-Suite, CI (hassfest + HACS + pytest) und ein eigenes Icon. Siehe [CONCEPT.md](CONCEPT.md).
+> **Status: 0.6.0 – öffentliche Beta.** Die Engine läuft inklusive **Reaktionen**, **Komfort** und
+> einer **eigenen Lovelace-Karte** im Frickelfabrik-Look. Dazu eine automatisierte Test-Suite,
+> CI (hassfest + HACS + pytest) und ein eigenes Icon. Siehe [CONCEPT.md](CONCEPT.md).
 > Rückmeldungen und Tester sind ausdrücklich willkommen.
 
-## Was schon funktioniert (0.5.0)
+## Was schon funktioniert (0.6.0)
 
 - Bedienfeld (`alarm_control_panel`) mit den Modi **Zuhause / Abwesend / Nacht / Urlaub**
 - **Sensorauswahl je Modus**: pro Sensor festlegen, in welchen Modi er scharf ist
@@ -28,6 +27,8 @@ Installierbar über HACS bzw. den **Home Assistant Marketplace**.
 - **Logbuch-Events** für Automationen: `frickelalarm_armed/arming/pending/triggered/disarmed`
   (mit Bereich, Modus, Auslöser)
 - **Sensor- und Aktoren-Übersicht** als Attribute (Live-Zustand, Modi, umgangene Sensoren an einem Ort)
+- **Eigene Lovelace-Karte** (`custom:frickelalarm-card`) im Frickelfabrik-Look – wird von der
+  Integration automatisch mit ausgeliefert und registriert (keine manuelle Ressource nötig)
 - Zustand übersteht Neustarts
 
 ## Qualität
@@ -36,11 +37,23 @@ Installierbar über HACS bzw. den **Home Assistant Marketplace**.
 - **CI**: GitHub Actions mit `hassfest`, HACS-Validierung und `pytest`
 - **Icon/Logo** im `brand/`-Ordner (Frickelfabrik-Look)
 
+## Lovelace-Karte
+
+Die Karte wird automatisch registriert. Einfach eine **manuelle Karte** aufs Dashboard legen:
+
+```yaml
+type: custom:frickelalarm-card
+entity: alarm_control_panel.haus_frickelalarm
+name: Haus            # optional
+```
+
+Sie zeigt Zustand (farbig), Countdown bei Ein-/Ausgangsverzögerung, Auslöser, offene und
+umgangene Sensoren, die Modus-Knöpfe und – falls ein Code gesetzt ist – ein Code-Feld.
+
 ## Was noch kommt
 
 - Eintrag im `home-assistant/brands`-Repo, damit das Icon auch in der HA-Oberfläche
   erscheint, und Aufnahme in die Marketplace-Default-Liste
-- eigene Lovelace-Karte im Frickelfabrik-Look (später)
 
 ## Installation über HACS / Marketplace (Custom Repository)
 

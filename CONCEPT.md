@@ -100,7 +100,7 @@ Damit es in HACS (und ggf. in die HACS-Default-Liste) kann:
 - **P3 – Aktionen** ✅ (0.3.0): Reaktionen pro Ereignis – Aktoren (Sirene/Licht/Schalter) an bei `triggered`, aus danach; optionale Benachrichtigung (Dienst + Text-Template + Ereignisauswahl).
 - **P4 – Komfort** ✅ (0.4.0): Bypass (Dienste `frickelalarm.bypass`/`clear_bypass`), Logbuch-Events (`frickelalarm_*`), Sensor-/Aktoren-Übersicht als Attribute. Code/PIN + „immer scharf"/Sabotage bereits in P2.
 - **P5 – Qualität & HACS** ✅ (0.5.0): pytest-Suite (pytest-homeassistant-custom-component), CI mit hassfest + HACS + pytest, Brand-Icon/Logo im `brand/`-Ordner (HACS-brands-Check bestanden). Offen: PR an `home-assistant/brands` fürs HA-UI-Icon + Aufnahme in HACS-Default.
-- **P6 – (optional)**: Einreichung HACS-Default, Lovelace-Karte im Frickelfabrik-Look.
+- **P6 – (optional)**: Lovelace-Karte im Frickelfabrik-Look ✅ (0.6.0, `custom:frickelalarm-card`, von der Integration ausgeliefert + registriert). Offen: Einreichung HACS-Default + `home-assistant/brands`-PR.
 
 ## 9. Getroffene Entscheidungen (2026-11-07)
 - **Name/Domain**: `frickelalarm` – festgelegt.
