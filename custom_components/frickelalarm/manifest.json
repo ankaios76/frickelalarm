@@ -1,0 +1,12 @@
+{
+  "domain": "frickelalarm",
+  "name": "Frickelalarm",
+  "version": "0.2.0",
+  "documentation": "https://github.com/ankaios76/frickelalarm",
+  "issue_tracker": "https://github.com/ankaios76/frickelalarm/issues",
+  "codeowners": ["@ankaios76"],
+  "config_flow": true,
+  "integration_type": "service",
+  "iot_class": "local_push",
+  "requirements": []
+}

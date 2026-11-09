@@ -1,0 +1,70 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Frickelalarm",
+        "description": "Create an alarm area. You can add more areas later for separate partitions.",
+        "data": {
+          "name": "Name",
+          "code": "Code (PIN, optional)",
+          "code_arm_required": "Require code to arm",
+          "code_disarm_required": "Require code to disarm"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "An area with this name already exists."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Frickelalarm settings",
+        "description": "What would you like to configure?",
+        "menu_options": {
+          "general": "General (code/PIN)",
+          "sensors": "Sensors",
+          "times": "Delays & alarm duration"
+        }
+      },
+      "general": {
+        "title": "General",
+        "data": {
+          "code": "Code (PIN, optional)",
+          "code_arm_required": "Require code to arm",
+          "code_disarm_required": "Require code to disarm"
+        }
+      },
+      "times": {
+        "title": "Delays & alarm duration",
+        "description": "All values in seconds. 0 = no delay.",
+        "data": {
+          "exit_delay": "Exit delay (time to leave)",
+          "entry_delay": "Entry delay (time to disarm)",
+          "trigger_duration": "Alarm duration (re-arms afterwards)"
+        }
+      },
+      "sensors": {
+        "title": "Select sensors",
+        "description": "Pick the sensors (door/window contacts, motion detectors …) that belong to this alarm. A detail page follows for each one.",
+        "data": {
+          "sensors": "Sensors"
+        }
+      },
+      "sensor_config": {
+        "title": "Sensor: {sensor}",
+        "description": "Settings for {sensor} ({entity_id}).",
+        "data": {
+          "modes": "Armed in these modes",
+          "delayed": "Delayed (uses the entry delay)",
+          "always": "Always armed (even when disarmed, e.g. smoke/tamper)"
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "invalid_code": {
+      "message": "Invalid code."
+    }
+  }
+}

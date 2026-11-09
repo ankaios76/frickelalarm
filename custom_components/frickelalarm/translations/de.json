@@ -1,0 +1,70 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Frickelalarm",
+        "description": "Lege einen Alarmbereich an. Weitere Bereiche (Partitionen) kannst du später als eigene Einträge hinzufügen.",
+        "data": {
+          "name": "Name",
+          "code": "Code (PIN, optional)",
+          "code_arm_required": "Code zum Scharfschalten nötig",
+          "code_disarm_required": "Code zum Unscharfschalten nötig"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Ein Bereich mit diesem Namen existiert bereits."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Frickelalarm-Einstellungen",
+        "description": "Was möchtest du einstellen?",
+        "menu_options": {
+          "general": "Allgemein (Code/PIN)",
+          "sensors": "Sensoren",
+          "times": "Verzögerungen & Alarmdauer"
+        }
+      },
+      "general": {
+        "title": "Allgemein",
+        "data": {
+          "code": "Code (PIN, optional)",
+          "code_arm_required": "Code zum Scharfschalten nötig",
+          "code_disarm_required": "Code zum Unscharfschalten nötig"
+        }
+      },
+      "times": {
+        "title": "Verzögerungen & Alarmdauer",
+        "description": "Alle Angaben in Sekunden. 0 = keine Verzögerung.",
+        "data": {
+          "exit_delay": "Ausgangsverzögerung (Zeit zum Verlassen)",
+          "entry_delay": "Eingangsverzögerung (Zeit zum Unscharfschalten)",
+          "trigger_duration": "Alarmdauer (danach wird wieder scharf geschaltet)"
+        }
+      },
+      "sensors": {
+        "title": "Sensoren auswählen",
+        "description": "Wähle die Sensoren (Tür-/Fensterkontakte, Bewegungsmelder …), die zur Anlage gehören. Für jeden folgt gleich eine Detailseite.",
+        "data": {
+          "sensors": "Sensoren"
+        }
+      },
+      "sensor_config": {
+        "title": "Sensor: {sensor}",
+        "description": "Einstellungen für {sensor} ({entity_id}).",
+        "data": {
+          "modes": "In diesen Modi scharf",
+          "delayed": "Verzögert (nutzt die Eingangsverzögerung)",
+          "always": "Immer scharf (auch unscharf, z. B. Rauch/Sabotage)"
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "invalid_code": {
+      "message": "Ungültiger Code."
+    }
+  }
+}
