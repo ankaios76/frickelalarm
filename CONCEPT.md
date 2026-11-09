@@ -98,7 +98,7 @@ Damit es in HACS (und ggf. in die HACS-Default-Liste) kann:
 - **P1 – Gerüst**: Integration lädt, Config-Flow legt eine Instanz an, `alarm_control_panel` mit arm/disarm (ohne Verzögerung). In HA einrichtbar.
 - **P2 – Engine** ✅ (0.2.0): Zustandsmaschine mit Ein-/Ausgangsverzögerung, Sensorauswahl je Modus, Auslösen → `triggered`, Alarmdauer + Wiederschärfen, „immer scharf"-Sensoren.
 - **P3 – Aktionen** ✅ (0.3.0): Reaktionen pro Ereignis – Aktoren (Sirene/Licht/Schalter) an bei `triggered`, aus danach; optionale Benachrichtigung (Dienst + Text-Template + Ereignisauswahl).
-- **P4 – Komfort**: Aktoren-Übersicht, Bypass, Code/PIN, Sabotage/„immer scharf", Logbuch-Events, Übersetzungen de/en.
+- **P4 – Komfort** ✅ (0.4.0): Bypass (Dienste `frickelalarm.bypass`/`clear_bypass`), Logbuch-Events (`frickelalarm_*`), Sensor-/Aktoren-Übersicht als Attribute. Code/PIN + „immer scharf"/Sabotage bereits in P2.
 - **P5 – Qualität & HACS**: Tests, CI (hassfest + HACS-Action), README, Brands-Eintrag, erstes Release-Tag; als Custom-Repo testbar.
 - **P6 – (optional)**: Einreichung HACS-Default, Lovelace-Karte im Frickelfabrik-Look.
 

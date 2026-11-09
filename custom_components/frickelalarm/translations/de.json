@@ -73,6 +73,28 @@
       }
     }
   },
+  "services": {
+    "bypass": {
+      "name": "Sensoren umgehen",
+      "description": "Klammert einen oder mehrere Sensoren vorübergehend aus (bis zum nächsten Unscharfschalten). „Immer scharf\"-Sensoren lassen sich nicht umgehen.",
+      "fields": {
+        "sensors": {
+          "name": "Sensoren",
+          "description": "Die auszuklammernden Sensoren."
+        }
+      }
+    },
+    "clear_bypass": {
+      "name": "Umgehung aufheben",
+      "description": "Hebt die Umgehung für bestimmte Sensoren oder – ohne Angabe – für alle auf.",
+      "fields": {
+        "sensors": {
+          "name": "Sensoren",
+          "description": "Nur diese Sensoren wieder scharf schalten (leer = alle)."
+        }
+      }
+    }
+  },
   "exceptions": {
     "invalid_code": {
       "message": "Ungültiger Code."

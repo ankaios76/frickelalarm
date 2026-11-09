@@ -1,0 +1,29 @@
+bypass:
+  target:
+    entity:
+      integration: frickelalarm
+      domain: alarm_control_panel
+  fields:
+    sensors:
+      required: true
+      selector:
+        entity:
+          domain:
+            - binary_sensor
+            - input_boolean
+          multiple: true
+
+clear_bypass:
+  target:
+    entity:
+      integration: frickelalarm
+      domain: alarm_control_panel
+  fields:
+    sensors:
+      required: false
+      selector:
+        entity:
+          domain:
+            - binary_sensor
+            - input_boolean
+          multiple: true

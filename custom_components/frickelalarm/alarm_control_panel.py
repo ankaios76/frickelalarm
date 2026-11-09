@@ -11,6 +11,8 @@ from datetime import timedelta
 import logging
 from typing import Any
 
+import voluptuous as vol
+
 from homeassistant.components.alarm_control_panel import (
     AlarmControlPanelEntity,
     AlarmControlPanelEntityFeature,
@@ -21,6 +23,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_NAME, STATE_ON
 from homeassistant.core import Event, EventStateChangedData, HomeAssistant, callback
 from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers import config_validation as cv, entity_platform
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import (
@@ -70,8 +73,22 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Das Bedienfeld dieses Bereichs anlegen."""
+    """Das Bedienfeld dieses Bereichs anlegen und Dienste registrieren."""
     async_add_entities([FrickelalarmPanel(entry)])
+
+    # Dienste nur einmal registrieren (mehrere Bereiche = mehrere Einträge)
+    if not hass.services.has_service(DOMAIN, "bypass"):
+        platform = entity_platform.async_get_current_platform()
+        platform.async_register_entity_service(
+            "bypass",
+            {vol.Required("sensors"): vol.All(cv.ensure_list, [cv.entity_id])},
+            "async_bypass",
+        )
+        platform.async_register_entity_service(
+            "clear_bypass",
+            {vol.Optional("sensors"): vol.All(cv.ensure_list, [cv.entity_id])},
+            "async_clear_bypass",
+        )
 
 
 class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
@@ -106,6 +123,7 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
         self._cancel_pending = None
         self._cancel_trigger = None
         self._unsub_sensors = None
+        self._bypassed: set[str] = set()
 
     # --- Konfiguration (aus Optionen) -------------------------------------
     @property
@@ -142,20 +160,62 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
             self._entry.options.get(CONF_CODE_ARM_REQUIRED, False)
         )
 
+    def _entity_label(self, entity_id: str) -> str:
+        state = self.hass.states.get(entity_id)
+        return state.name if state is not None else entity_id
+
+    def _entity_state(self, entity_id: str) -> str:
+        state = self.hass.states.get(entity_id)
+        return state.state if state is not None else "unbekannt"
+
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        attrs: dict[str, Any] = {"konfigurierte_sensoren": len(self._sensors)}
+        attrs: dict[str, Any] = {
+            "modus": self._arm_mode.value if self._arm_mode else None,
+            "konfigurierte_sensoren": len(self._sensors),
+        }
         if self._reason:
             attrs["ausloeser"] = self._reason
         if self._timer_end is not None:
             remaining = (self._timer_end - dt_util.utcnow()).total_seconds()
             attrs["restzeit_s"] = max(0, int(remaining))
-        offen = []
+
+        # Sensor-Übersicht: alles an einem Ort, mit Live-Zustand
+        offen: list[str] = []
+        sensoren: list[dict[str, Any]] = []
         for sensor in self._sensors:
-            state = self.hass.states.get(sensor[CONF_ENTITY_ID])
-            if state is not None and state.state == STATE_ON:
-                offen.append(state.name or sensor[CONF_ENTITY_ID])
+            eid = sensor[CONF_ENTITY_ID]
+            raw = self._entity_state(eid)
+            is_open = raw == STATE_ON
+            if is_open:
+                offen.append(self._entity_label(eid))
+            sensoren.append(
+                {
+                    "name": self._entity_label(eid),
+                    "entity_id": eid,
+                    "zustand": raw,
+                    "offen": is_open,
+                    "modi": sensor.get(CONF_MODES, []),
+                    "verzoegert": bool(sensor.get(CONF_DELAYED, False)),
+                    "immer_scharf": bool(sensor.get(CONF_ALWAYS, False)),
+                    "umgangen": eid in self._bypassed,
+                }
+            )
         attrs["offene_sensoren"] = offen
+        attrs["sensoren"] = sensoren
+        attrs["umgangene_sensoren"] = sorted(self._bypassed)
+
+        # Aktoren-Übersicht (Sirene/Licht/Schalter) mit Live-Zustand
+        aktoren = []
+        for eid in self._entry.options.get(CONF_SIRENS) or []:
+            aktoren.append(
+                {
+                    "name": self._entity_label(eid),
+                    "entity_id": eid,
+                    "zustand": self._entity_state(eid),
+                }
+            )
+        attrs["aktoren"] = aktoren
         return attrs
 
     # --- Lifecycle --------------------------------------------------------
@@ -217,7 +277,33 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
         self._attr_alarm_state = state
         self.async_write_ha_state()
         if state != old:
+            self._fire_event(state)
             self._run_reactions(old, state)
+
+    @callback
+    def _fire_event(self, state: AlarmControlPanelState) -> None:
+        """Ereignis für Logbuch/Automationen feuern, z. B. frickelalarm_triggered."""
+        if state in _ARMED_STATES:
+            key = "armed"
+        elif state == AlarmControlPanelState.ARMING:
+            key = "arming"
+        elif state == AlarmControlPanelState.PENDING:
+            key = "pending"
+        elif state == AlarmControlPanelState.TRIGGERED:
+            key = "triggered"
+        elif state == AlarmControlPanelState.DISARMED:
+            key = "disarmed"
+        else:
+            return
+        self.hass.bus.async_fire(
+            f"{DOMAIN}_{key}",
+            {
+                "entity_id": self.entity_id,
+                "name": self._entry.data.get(CONF_NAME, DEFAULT_NAME),
+                "mode": self._arm_mode.value if self._arm_mode else None,
+                "reason": self._reason or None,
+            },
+        )
 
     # --- Reaktionen (Phase 3) --------------------------------------------
     @callback
@@ -313,6 +399,10 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
         always = bool(cfg.get(CONF_ALWAYS, False))
 
         if state == AlarmControlPanelState.TRIGGERED:
+            return
+
+        # Umgangene (bypass) Sensoren ignorieren – außer "immer scharf" (Sicherheit)
+        if entity_id in self._bypassed and not always:
             return
 
         # "Immer scharf" (z. B. Rauch/Sabotage) löst in jedem Zustand aus
@@ -424,6 +514,7 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
         self._clear_timers()
         self._arm_mode = None
         self._reason = None
+        self._bypassed.clear()
         self._set(AlarmControlPanelState.DISARMED)
 
     async def async_alarm_arm_home(self, code: str | None = None) -> None:
@@ -440,3 +531,26 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
 
     async def async_alarm_trigger(self, code: str | None = None) -> None:
         self._trigger("manuell ausgelöst")
+
+    # --- Komfort-Dienste (Phase 4) ---------------------------------------
+    async def async_bypass(self, sensors: list[str]) -> None:
+        """Sensoren temporär ausklammern (bis zum Unscharfschalten)."""
+        valid = {s[CONF_ENTITY_ID] for s in self._sensors}
+        for eid in sensors:
+            if eid in valid:
+                self._bypassed.add(eid)
+            else:
+                _LOGGER.warning(
+                    "Frickelalarm: %s ist kein konfigurierter Sensor, nicht umgangen",
+                    eid,
+                )
+        self.async_write_ha_state()
+
+    async def async_clear_bypass(self, sensors: list[str] | None = None) -> None:
+        """Umgehung aufheben – für bestimmte Sensoren oder alle."""
+        if sensors:
+            for eid in sensors:
+                self._bypassed.discard(eid)
+        else:
+            self._bypassed.clear()
+        self.async_write_ha_state()

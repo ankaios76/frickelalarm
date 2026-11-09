@@ -4,12 +4,12 @@ Eine per UI konfigurierbare **Alarmanlagen-Integration für Home Assistant** –
 Alarm-Engine (Modi, Ein-/Ausgangsverzögerung, echtes Auslösen) und Mehrbereich-Unterstützung.
 Installierbar über HACS bzw. den **Home Assistant Marketplace**.
 
-> **Status: 0.3.0 – öffentliche Beta.** Die Engine läuft inklusive **Reaktionen**: Sensoren je
-> Modus auswählen, Verzögerungen setzen, Alarm auslösen – und im Alarmfall Sirene/Licht schalten
-> und benachrichtigen. Siehe [CONCEPT.md](CONCEPT.md). Rückmeldungen und Tester sind ausdrücklich
-> willkommen.
+> **Status: 0.4.0 – öffentliche Beta.** Die Engine läuft inklusive **Reaktionen** und **Komfort**:
+> Sensoren je Modus, Verzögerungen, Alarm auslösen, Sirene/Licht schalten, benachrichtigen,
+> Sensoren per Dienst ausklammern (Bypass) und Logbuch-Events. Siehe [CONCEPT.md](CONCEPT.md).
+> Rückmeldungen und Tester sind ausdrücklich willkommen.
 
-## Was schon funktioniert (0.3.0)
+## Was schon funktioniert (0.4.0)
 
 - Bedienfeld (`alarm_control_panel`) mit den Modi **Zuhause / Abwesend / Nacht / Urlaub**
 - **Sensorauswahl je Modus**: pro Sensor festlegen, in welchen Modi er scharf ist
@@ -22,11 +22,15 @@ Installierbar über HACS bzw. den **Home Assistant Marketplace**.
   und danach wieder aus; optionale **Benachrichtigung** je Ereignis mit frei formulierbarem Text
 - optionaler **Code/PIN**, getrennt für Scharf- und/oder Unscharfschalten
 - **Mehrere Bereiche/Partitionen**: ein Eintrag = ein Bereich
-- Zustand übersteht Neustarts, Attribute zeigen offene Sensoren, Auslöser und Restzeit
+- **Bypass**: Sensoren per Dienst (`frickelalarm.bypass` / `clear_bypass`) temporär ausklammern
+  (gilt bis zum nächsten Unscharfschalten; „immer scharf"-Sensoren sind davon ausgenommen)
+- **Logbuch-Events** für Automationen: `frickelalarm_armed/arming/pending/triggered/disarmed`
+  (mit Bereich, Modus, Auslöser)
+- **Sensor- und Aktoren-Übersicht** als Attribute (Live-Zustand, Modi, umgangene Sensoren an einem Ort)
+- Zustand übersteht Neustarts
 
 ## Was noch kommt
 
-- Aktoren-Übersicht, Bypass, Sabotage, Logbuch-Events (Phase 4)
 - Tests/CI, Brands-Eintrag, Aufnahme in die Marketplace-Default-Liste (Phase 5)
 - eigene Lovelace-Karte im Frickelfabrik-Look (später)
 

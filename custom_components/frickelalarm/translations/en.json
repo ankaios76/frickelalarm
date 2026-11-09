@@ -73,6 +73,28 @@
       }
     }
   },
+  "services": {
+    "bypass": {
+      "name": "Bypass sensors",
+      "description": "Temporarily excludes one or more sensors (until the next disarm). \"Always armed\" sensors cannot be bypassed.",
+      "fields": {
+        "sensors": {
+          "name": "Sensors",
+          "description": "The sensors to bypass."
+        }
+      }
+    },
+    "clear_bypass": {
+      "name": "Clear bypass",
+      "description": "Clears the bypass for specific sensors, or for all of them when left empty.",
+      "fields": {
+        "sensors": {
+          "name": "Sensors",
+          "description": "Only re-arm these sensors (empty = all)."
+        }
+      }
+    }
+  },
   "exceptions": {
     "invalid_code": {
       "message": "Invalid code."
