@@ -24,7 +24,18 @@
         "menu_options": {
           "general": "General (code/PIN)",
           "sensors": "Sensors",
-          "times": "Delays & alarm duration"
+          "times": "Delays & alarm duration",
+          "actions": "Reactions (siren, light, notification)"
+        }
+      },
+      "actions": {
+        "title": "Reactions on alarm",
+        "description": "These actors are switched on when the alarm triggers and switched off again afterwards. Optionally a notification. In the text you can use {{ name }} (area), {{ reason }} (triggering sensor) and {{ event }}.",
+        "data": {
+          "sirens": "Actors on alarm (siren, light, switch)",
+          "notify_service": "Notification service",
+          "notify_message": "Message text",
+          "notify_events": "Notify on"
         }
       },
       "general": {

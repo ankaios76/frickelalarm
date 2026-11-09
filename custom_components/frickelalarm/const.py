@@ -43,3 +43,20 @@ ARM_MODE_LABELS: dict[str, str] = {
     "armed_night": "Nacht (armed_night)",
     "armed_vacation": "Urlaub (armed_vacation)",
 }
+
+# Reaktionen (Phase 3)
+CONF_SIRENS = "sirens"            # Aktoren (switch/siren/light), bei Alarm an, danach aus
+CONF_NOTIFY_SERVICE = "notify_service"   # z. B. "notify.mobile_app_x" oder "persistent_notification.create"
+CONF_NOTIFY_MESSAGE = "notify_message"   # Nachrichtentext (Jinja-Template, {{ name }} / {{ reason }})
+CONF_NOTIFY_EVENTS = "notify_events"     # bei welchen Ereignissen benachrichtigt wird
+
+DEFAULT_NOTIFY_MESSAGE = "Frickelalarm {{ name }}: {{ event }}{% if reason %} ({{ reason }}){% endif %}"
+
+# Ereignisse, bei denen eine Benachrichtigung gesendet werden kann
+NOTIFY_EVENTS: list[str] = ["triggered", "pending", "armed", "disarmed"]
+NOTIFY_EVENT_LABELS: dict[str, str] = {
+    "triggered": "Alarm ausgelöst (triggered)",
+    "pending": "Eingangsverzögerung läuft (pending)",
+    "armed": "Scharf geschaltet (armed)",
+    "disarmed": "Unscharf geschaltet (disarmed)",
+}

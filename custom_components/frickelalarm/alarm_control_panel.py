@@ -28,6 +28,7 @@ from homeassistant.helpers.event import (
     async_track_state_change_event,
 )
 from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.helpers.template import Template
 import homeassistant.util.dt as dt_util
 
 from .const import (
@@ -40,11 +41,16 @@ from .const import (
     CONF_ENTRY_DELAY,
     CONF_EXIT_DELAY,
     CONF_MODES,
+    CONF_NOTIFY_EVENTS,
+    CONF_NOTIFY_MESSAGE,
+    CONF_NOTIFY_SERVICE,
     CONF_SENSORS,
+    CONF_SIRENS,
     CONF_TRIGGER_DURATION,
     DEFAULT_ENTRY_DELAY,
     DEFAULT_EXIT_DELAY,
     DEFAULT_NAME,
+    DEFAULT_NOTIFY_MESSAGE,
     DEFAULT_TRIGGER_DURATION,
     DOMAIN,
 )
@@ -207,8 +213,83 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
 
     @callback
     def _set(self, state: AlarmControlPanelState) -> None:
+        old = self._attr_alarm_state
         self._attr_alarm_state = state
         self.async_write_ha_state()
+        if state != old:
+            self._run_reactions(old, state)
+
+    # --- Reaktionen (Phase 3) --------------------------------------------
+    @callback
+    def _event_key(self, state: AlarmControlPanelState) -> str | None:
+        if state == AlarmControlPanelState.TRIGGERED:
+            return "triggered"
+        if state == AlarmControlPanelState.PENDING:
+            return "pending"
+        if state in _ARMED_STATES:
+            return "armed"
+        if state == AlarmControlPanelState.DISARMED:
+            return "disarmed"
+        return None  # arming -> keine Reaktion
+
+    @callback
+    def _run_reactions(
+        self, old: AlarmControlPanelState, new: AlarmControlPanelState
+    ) -> None:
+        sirens = self._entry.options.get(CONF_SIRENS) or []
+        triggered = AlarmControlPanelState.TRIGGERED
+
+        # Aktoren bei Alarm einschalten, beim Verlassen von "triggered" ausschalten
+        if sirens:
+            if new == triggered and old != triggered:
+                self.hass.async_create_task(
+                    self.hass.services.async_call(
+                        "homeassistant", "turn_on", {"entity_id": sirens}, blocking=False
+                    )
+                )
+            elif old == triggered and new != triggered:
+                self.hass.async_create_task(
+                    self.hass.services.async_call(
+                        "homeassistant", "turn_off", {"entity_id": sirens}, blocking=False
+                    )
+                )
+
+        # Benachrichtigung je nach Ereignis
+        service = str(self._entry.options.get(CONF_NOTIFY_SERVICE, "") or "").strip()
+        if not service:
+            return
+        events = self._entry.options.get(CONF_NOTIFY_EVENTS) or ["triggered"]
+        event_key = self._event_key(new)
+        if event_key is None or event_key not in events:
+            return
+        self._notify(service, event_key)
+
+    @callback
+    def _notify(self, service: str, event_key: str) -> None:
+        name = self._entry.data.get(CONF_NAME, DEFAULT_NAME)
+        tmpl = str(
+            self._entry.options.get(CONF_NOTIFY_MESSAGE, "") or DEFAULT_NOTIFY_MESSAGE
+        )
+        variables = {"name": name, "reason": self._reason or "", "event": event_key}
+        try:
+            message = Template(tmpl, self.hass).async_render(
+                variables, parse_result=False
+            )
+        except Exception:  # noqa: BLE001 - Vorlage soll nie den Alarm blockieren
+            _LOGGER.warning("Frickelalarm: Nachrichtenvorlage fehlerhaft", exc_info=True)
+            message = tmpl
+        title = f"Frickelalarm: {name}"
+
+        domain, _, svc = service.partition(".")
+        if not domain or not svc:
+            return
+        if domain == "persistent_notification":
+            data: dict = {"message": message, "title": title}
+        else:
+            data = {"message": message, "title": title}
+        self.hass.async_create_task(
+            self.hass.services.async_call(domain, svc, data, blocking=False)
+        )
 
     # --- Sensor-Logik -----------------------------------------------------
     @callback

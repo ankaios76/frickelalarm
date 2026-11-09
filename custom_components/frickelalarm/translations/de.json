@@ -24,7 +24,18 @@
         "menu_options": {
           "general": "Allgemein (Code/PIN)",
           "sensors": "Sensoren",
-          "times": "Verzögerungen & Alarmdauer"
+          "times": "Verzögerungen & Alarmdauer",
+          "actions": "Reaktionen (Sirene, Licht, Benachrichtigung)"
+        }
+      },
+      "actions": {
+        "title": "Reaktionen im Alarmfall",
+        "description": "Diese Aktoren werden bei Alarm (triggered) eingeschaltet und danach wieder ausgeschaltet. Optional eine Benachrichtigung. Im Text sind {{ name }} (Bereich), {{ reason }} (auslösender Sensor) und {{ event }} nutzbar.",
+        "data": {
+          "sirens": "Aktoren bei Alarm (Sirene, Licht, Schalter)",
+          "notify_service": "Benachrichtigungsdienst",
+          "notify_message": "Nachrichtentext",
+          "notify_events": "Benachrichtigen bei"
         }
       },
       "general": {

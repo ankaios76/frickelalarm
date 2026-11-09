@@ -25,6 +25,9 @@ from homeassistant.helpers.selector import (
     SelectSelector,
     SelectSelectorConfig,
     SelectSelectorMode,
+    TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
 )
 
 from .const import (
@@ -39,13 +42,20 @@ from .const import (
     CONF_ENTRY_DELAY,
     CONF_EXIT_DELAY,
     CONF_MODES,
+    CONF_NOTIFY_EVENTS,
+    CONF_NOTIFY_MESSAGE,
+    CONF_NOTIFY_SERVICE,
     CONF_SENSORS,
+    CONF_SIRENS,
     CONF_TRIGGER_DURATION,
     DEFAULT_ENTRY_DELAY,
     DEFAULT_EXIT_DELAY,
     DEFAULT_NAME,
+    DEFAULT_NOTIFY_MESSAGE,
     DEFAULT_TRIGGER_DURATION,
     DOMAIN,
+    NOTIFY_EVENT_LABELS,
+    NOTIFY_EVENTS,
 )
 
 _SECONDS = NumberSelector(
@@ -79,6 +89,10 @@ class FrickelalarmConfigFlow(ConfigFlow, domain=DOMAIN):
                     CONF_EXIT_DELAY: DEFAULT_EXIT_DELAY,
                     CONF_ENTRY_DELAY: DEFAULT_ENTRY_DELAY,
                     CONF_TRIGGER_DURATION: DEFAULT_TRIGGER_DURATION,
+                    CONF_SIRENS: [],
+                    CONF_NOTIFY_SERVICE: "",
+                    CONF_NOTIFY_MESSAGE: DEFAULT_NOTIFY_MESSAGE,
+                    CONF_NOTIFY_EVENTS: ["triggered"],
                 },
             )
 
@@ -119,8 +133,82 @@ class FrickelalarmOptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         return self.async_show_menu(
             step_id="init",
-            menu_options=["general", "sensors", "times"],
+            menu_options=["general", "sensors", "times", "actions"],
         )
+
+    # --- Reaktionen (Aktoren + Benachrichtigung) --------------------------
+    async def async_step_actions(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            return self._save(
+                {
+                    CONF_SIRENS: list(user_input.get(CONF_SIRENS, [])),
+                    CONF_NOTIFY_SERVICE: user_input.get(CONF_NOTIFY_SERVICE, ""),
+                    CONF_NOTIFY_MESSAGE: (
+                        user_input.get(CONF_NOTIFY_MESSAGE) or DEFAULT_NOTIFY_MESSAGE
+                    ),
+                    CONF_NOTIFY_EVENTS: list(
+                        user_input.get(CONF_NOTIFY_EVENTS, ["triggered"])
+                    ),
+                }
+            )
+
+        opts = self.config_entry.options
+        notify_services = sorted(
+            self.hass.services.async_services().get("notify", {}).keys()
+        )
+        svc_options = [
+            SelectOptionDict(value="", label="— keine Benachrichtigung —"),
+            SelectOptionDict(
+                value="persistent_notification.create",
+                label="Dauerhafte Benachrichtigung in Home Assistant",
+            ),
+        ]
+        svc_options += [
+            SelectOptionDict(value=f"notify.{s}", label=f"notify.{s}")
+            for s in notify_services
+        ]
+
+        schema = vol.Schema(
+            {
+                vol.Optional(
+                    CONF_SIRENS, default=opts.get(CONF_SIRENS, [])
+                ): EntitySelector(
+                    EntitySelectorConfig(
+                        domain=["switch", "siren", "light", "input_boolean"],
+                        multiple=True,
+                    )
+                ),
+                vol.Optional(
+                    CONF_NOTIFY_SERVICE, default=opts.get(CONF_NOTIFY_SERVICE, "")
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=svc_options, mode=SelectSelectorMode.DROPDOWN
+                    )
+                ),
+                vol.Optional(
+                    CONF_NOTIFY_MESSAGE,
+                    default=opts.get(CONF_NOTIFY_MESSAGE, DEFAULT_NOTIFY_MESSAGE),
+                ): TextSelector(
+                    TextSelectorConfig(type=TextSelectorType.TEXT, multiline=True)
+                ),
+                vol.Optional(
+                    CONF_NOTIFY_EVENTS,
+                    default=opts.get(CONF_NOTIFY_EVENTS, ["triggered"]),
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=[
+                            SelectOptionDict(value=e, label=NOTIFY_EVENT_LABELS[e])
+                            for e in NOTIFY_EVENTS
+                        ],
+                        multiple=True,
+                        mode=SelectSelectorMode.LIST,
+                    )
+                ),
+            }
+        )
+        return self.async_show_form(step_id="actions", data_schema=schema)
 
     # --- Allgemein (Code) -------------------------------------------------
     async def async_step_general(
