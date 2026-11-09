@@ -41,7 +41,8 @@
           "night_schedule": "Night mode on a schedule",
           "night_start": "Night mode start",
           "night_end": "Night mode end",
-          "night_require_home": "Night mode only when someone is home"
+          "night_require_home": "Night mode only when someone is home",
+          "auto_disarm_during_alarm": "Auto-disarm even during a running alarm"
         }
       },
       "actions": {
@@ -61,6 +62,7 @@
           "code_arm_required": "Require code to arm",
           "code_disarm_required": "Require code to disarm",
           "tamper_detection": "Report tamper/signal loss (sensor unavailable while armed)",
+          "tamper_triggers": "Tamper triggers the alarm (not just a notification)",
           "open_on_arm": "Open sensors when arming"
         }
       },
@@ -180,6 +182,12 @@
     },
     "sensors_open": {
       "message": "Cannot arm – open sensors: {sensors}"
+    },
+    "config_requires_disarmed": {
+      "message": "Configuration changes are only possible while disarmed."
+    },
+    "invalid_sensor": {
+      "message": "Unknown or unsuitable sensor: {sensor} (only binary_sensor or input_boolean)."
     }
   }
 }

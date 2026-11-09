@@ -88,3 +88,14 @@ OPEN_ON_ARM_LABELS = {
     "bypass": "Offene Sensoren umgehen & melden",
     "block": "Scharfschalten verhindern",
 }
+
+# Härtung / Review-Fixes (Phase 10)
+CONF_TAMPER_TRIGGERS = "tamper_triggers"               # Sabotage löst Alarm aus
+CONF_AUTO_DISARM_DURING_ALARM = "auto_disarm_during_alarm"  # Auto-unscharf auch bei Alarm
+DEFAULT_TAMPER_TRIGGERS = False
+DEFAULT_AUTO_DISARM_DURING_ALARM = False
+# Sichere Standard-Modi, wenn add_sensor ohne modes aufgerufen wird (nicht armed_home)
+SAFE_DEFAULT_MODES = ["armed_away", "armed_vacation"]
+
+# Signal: Optionen geändert (Entität aktualisiert sich live, ohne Reload)
+SIGNAL_OPTIONS_UPDATED = DOMAIN + "_options_updated_{}"

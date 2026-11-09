@@ -7,6 +7,7 @@ je Modus ausgewählten Sensoren. Zustand übersteht Neustarts (RestoreEntity).
 
 from __future__ import annotations
 
+import dataclasses
 from datetime import timedelta
 import logging
 from typing import Any
@@ -39,13 +40,14 @@ from homeassistant.core import (
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv, entity_platform
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import (
     async_call_later,
     async_track_state_change_event,
     async_track_time_change,
 )
-from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.helpers.restore_state import ExtraStoredData, RestoreEntity
 from homeassistant.helpers.template import Template
 import homeassistant.util.dt as dt_util
 
@@ -56,6 +58,7 @@ from .const import (
     CONF_AUTO_ARM_DELAY,
     CONF_AUTO_ARM_MODE,
     CONF_AUTO_DISARM,
+    CONF_AUTO_DISARM_DURING_ALARM,
     CONF_CODE,
     CONF_CODE_ARM_REQUIRED,
     CONF_CODE_DISARM_REQUIRED,
@@ -76,11 +79,14 @@ from .const import (
     CONF_SENSORS,
     CONF_SIRENS,
     CONF_TAMPER,
+    CONF_TAMPER_TRIGGERS,
     CONF_TRIGGER_DURATION,
     DEFAULT_AUTO_ARM_DELAY,
     DEFAULT_AUTO_ARM_MODE,
+    DEFAULT_AUTO_DISARM_DURING_ALARM,
     DEFAULT_OPEN_ON_ARM,
     DEFAULT_TAMPER,
+    DEFAULT_TAMPER_TRIGGERS,
     DEFAULT_ENTRY_DELAY,
     DEFAULT_EXIT_DELAY,
     DEFAULT_NAME,
@@ -90,6 +96,8 @@ from .const import (
     DEFAULT_TRIGGER_DURATION,
     DOMAIN,
     NOTIFY_EVENTS,
+    SAFE_DEFAULT_MODES,
+    SIGNAL_OPTIONS_UPDATED,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -100,6 +108,32 @@ _ARMED_STATES = {
     AlarmControlPanelState.ARMED_NIGHT,
     AlarmControlPanelState.ARMED_VACATION,
 }
+
+_UNAVAILABLE_STATES = (STATE_UNAVAILABLE, STATE_UNKNOWN)
+
+
+@dataclasses.dataclass
+class FrickelalarmExtraData(ExtraStoredData):
+    """Laufzeitstatus, der einen Neustart übersteht (ergänzt den Entitätszustand)."""
+
+    arm_mode: str | None = None
+    reason: str | None = None
+    timer_end: float | None = None  # Unix-Zeit, wann der laufende Timer abläuft
+    night_active: bool = False
+    bypassed: list[str] = dataclasses.field(default_factory=list)
+
+    def as_dict(self) -> dict[str, Any]:
+        return dataclasses.asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "FrickelalarmExtraData":
+        return cls(
+            arm_mode=data.get("arm_mode"),
+            reason=data.get("reason"),
+            timer_end=data.get("timer_end"),
+            night_active=bool(data.get("night_active", False)),
+            bypassed=list(data.get("bypassed") or []),
+        )
 
 
 async def async_setup_entry(
@@ -357,26 +391,91 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
         return attrs
 
     # --- Lifecycle --------------------------------------------------------
+    @property
+    def extra_restore_state_data(self) -> FrickelalarmExtraData:
+        """Laufzeitstatus sichern, damit ein Neustart den Alarm nicht verliert (#1b/#3)."""
+        return FrickelalarmExtraData(
+            arm_mode=self._arm_mode.value if self._arm_mode else None,
+            reason=self._reason,
+            timer_end=self._timer_end.timestamp() if self._timer_end else None,
+            night_active=self._night_active,
+            bypassed=sorted(self._bypassed),
+        )
+
     async def async_added_to_hass(self) -> None:
-        """Letzten Zustand wiederherstellen und Sensoren beobachten."""
+        """Letzten Zustand (inkl. laufendem Alarm) wiederherstellen und Verdrahtung aufsetzen."""
         await super().async_added_to_hass()
-        if (last := await self.async_get_last_state()) is not None:
+
+        last = await self.async_get_last_state()
+        data: FrickelalarmExtraData | None = None
+        if (extra := await self.async_get_last_extra_data()) is not None:
             try:
-                restored = AlarmControlPanelState(last.state)
-            except ValueError:
-                restored = AlarmControlPanelState.DISARMED
-            # Flüchtige Zustände nicht wiederherstellen
-            if restored in (
-                AlarmControlPanelState.ARMING,
-                AlarmControlPanelState.PENDING,
-                AlarmControlPanelState.TRIGGERED,
-            ):
-                restored = AlarmControlPanelState.DISARMED
-            self._attr_alarm_state = restored
-            if restored in _ARMED_STATES:
-                self._arm_mode = restored
+                data = FrickelalarmExtraData.from_dict(extra.as_dict())
+            except Exception:  # noqa: BLE001 - defekte Restore-Daten nie fatal
+                data = None
+        if last is not None:
+            self._restore(last.state, data)
+
         self._subscribe()
         self._setup_automation()
+        # Optionen-Änderung: live aktualisieren statt Reload (laufender Alarm bleibt erhalten)
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass,
+                SIGNAL_OPTIONS_UPDATED.format(self._entry.entry_id),
+                self._on_options_updated,
+            )
+        )
+
+    @callback
+    def _on_options_updated(self) -> None:
+        self._subscribe()
+        self._setup_automation()
+        self.async_write_ha_state()
+
+    @callback
+    def _restore(self, state_str: str, data: FrickelalarmExtraData | None) -> None:
+        """Zustand nach Neustart fortsetzen – auch arming/pending/triggered."""
+        try:
+            state = AlarmControlPanelState(state_str)
+        except ValueError:
+            state = AlarmControlPanelState.DISARMED
+
+        if data is not None:
+            if data.arm_mode:
+                try:
+                    self._arm_mode = AlarmControlPanelState(data.arm_mode)
+                except ValueError:
+                    self._arm_mode = None
+            self._reason = data.reason
+            self._night_active = bool(data.night_active)
+            self._bypassed = set(data.bypassed or [])
+
+        now = dt_util.utcnow().timestamp()
+        remaining = (
+            max(0, int(data.timer_end - now)) if (data and data.timer_end) else 0
+        )
+
+        if state == AlarmControlPanelState.ARMING:
+            target = self._arm_mode or AlarmControlPanelState.ARMED_AWAY
+            self._arm_mode = target
+            if remaining > 0:
+                self._begin_arming(remaining)
+            else:
+                self._finish_arming_now()
+        elif state == AlarmControlPanelState.PENDING:
+            if remaining > 0:
+                self._begin_pending(remaining, self._reason or "Sensor")
+            else:
+                self._trigger(self._reason or "Sensor")
+        elif state == AlarmControlPanelState.TRIGGERED:
+            # Alarm nach Neustart fortsetzen (Rest-Alarmdauer bzw. volle Dauer)
+            self._trigger(self._reason or "Alarm", duration=remaining or None)
+        elif state in _ARMED_STATES:
+            self._arm_mode = state
+            self._attr_alarm_state = state
+        else:
+            self._attr_alarm_state = AlarmControlPanelState.DISARMED
 
     async def async_will_remove_from_hass(self) -> None:
         self._clear_timers()
@@ -490,12 +589,21 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
             self._cancel_autoarm()
             self._cancel_autoarm = None
 
-        # Heimkehr: Auto-Unscharf (auch während pending/triggered)
-        if arrived and self._auto_disarm and self._attr_alarm_state != AlarmControlPanelState.DISARMED:
-            label = (new.name or "jemand") if new else "jemand"
-            _LOGGER.info("Frickelalarm: Auto-unscharf (Heimkehr: %s)", label)
-            self._disarm_internal()
-            return
+        # Heimkehr: Auto-Unscharf. Standardmäßig NICHT während eines laufenden Alarms
+        # (ein GPS-Ausreißer soll keinen Alarm entschärfen, #9).
+        if arrived and self._auto_disarm:
+            state = self._attr_alarm_state
+            during_alarm = state == AlarmControlPanelState.TRIGGERED
+            allow_during_alarm = bool(
+                self._entry.options.get(CONF_AUTO_DISARM_DURING_ALARM, False)
+            )
+            if state != AlarmControlPanelState.DISARMED and (
+                not during_alarm or allow_during_alarm
+            ):
+                label = (new.name or "jemand") if new else "jemand"
+                _LOGGER.info("Frickelalarm: Auto-unscharf (Heimkehr: %s)", label)
+                self._disarm_internal()
+                return
 
         # Alle weg: Auto-Scharf nach Verzögerung planen
         if (
@@ -675,11 +783,13 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
                 "sensor": sensor_name,
             },
         )
-        service = str(self._entry.options.get(CONF_NOTIFY_SERVICE, "") or "").strip()
-        if service:
-            self._send_notification(
-                service, f"Sabotage/Signalverlust: {sensor_name} ist nicht erreichbar"
-            )
+        self._report(f"Sabotage/Signalverlust: {sensor_name} ist nicht erreichbar")
+        # Optional: Sabotage löst den Alarm aus (#4)
+        if (
+            self._entry.options.get(CONF_TAMPER_TRIGGERS, DEFAULT_TAMPER_TRIGGERS)
+            and self._attr_alarm_state != AlarmControlPanelState.TRIGGERED
+        ):
+            self._trigger(f"Sabotage: {sensor_name}")
 
     # --- Sensor-Logik -----------------------------------------------------
     @callback
@@ -776,7 +886,7 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
 
     @callback
     def _open_active_sensors(self, target: AlarmControlPanelState) -> list[str]:
-        """Konfigurierte, im Zielmodus scharfe Sensoren, die gerade offen sind."""
+        """Im Zielmodus scharfe Sensoren, die gerade offen ODER unerreichbar sind."""
         mode = target.value
         open_ids: list[str] = []
         for cfg in self._sensors:
@@ -786,14 +896,21 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
                 continue
             eid = cfg[CONF_ENTITY_ID]
             st = self.hass.states.get(eid)
-            if st is not None and st.state == STATE_ON:
+            if st is None or st.state == STATE_ON or st.state in _UNAVAILABLE_STATES:
                 open_ids.append(eid)
         return open_ids
+
+    @callback
+    def _report(self, message: str) -> None:
+        """Hinweis über den Benachrichtigungsdienst senden, falls konfiguriert."""
+        service = str(self._entry.options.get(CONF_NOTIFY_SERVICE, "") or "").strip()
+        if service:
+            self._send_notification(service, message)
 
     async def _arm(self, target: AlarmControlPanelState, code: str | None) -> None:
         self._validate(code, self.code_arm_required)
 
-        # Offene Sensoren beim Scharfschalten behandeln
+        # Offene/unerreichbare Sensoren beim Scharfschalten behandeln
         open_ids = self._open_active_sensors(target)
         if open_ids:
             names = ", ".join(self._entity_label(e) for e in open_ids)
@@ -807,25 +924,23 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
             if handling == "bypass":
                 for eid in open_ids:
                     self._bypassed.add(eid)
-                service = str(
-                    self._entry.options.get(CONF_NOTIFY_SERVICE, "") or ""
-                ).strip()
-                if service:
-                    self._send_notification(
-                        service, f"Beim Scharfschalten umgangen (offen): {names}"
-                    )
+                self._report(f"Beim Scharfschalten umgangen (offen/unerreichbar): {names}")
+            else:  # allow: trotzdem scharf, aber melden (#5)
+                self._report(f"Hinweis – beim Scharfschalten offen/unerreichbar: {names}")
 
         self._clear_timers()
         self._arm_mode = target
         self._reason = None
         if self._exit_delay > 0:
-            self._set(AlarmControlPanelState.ARMING)
-            self._timer_end = dt_util.utcnow() + timedelta(seconds=self._exit_delay)
-            self._cancel_arming = async_call_later(
-                self.hass, self._exit_delay, self._finish_arming
-            )
+            self._begin_arming(self._exit_delay)
         else:
             self._finish_arming_now()
+
+    @callback
+    def _begin_arming(self, seconds: int) -> None:
+        self._timer_end = dt_util.utcnow() + timedelta(seconds=seconds)
+        self._cancel_arming = async_call_later(self.hass, seconds, self._finish_arming)
+        self._set(AlarmControlPanelState.ARMING)
 
     @callback
     def _finish_arming(self, _now) -> None:
@@ -837,22 +952,47 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
         self._timer_end = None
         if self._arm_mode is not None:
             self._set(self._arm_mode)
+            self._check_active_open()
 
     @callback
     def _arm_now(self, target: AlarmControlPanelState) -> None:
-        """Sofort scharf schalten (Automatik: ohne Ausgangsverzögerung/Code)."""
+        """Sofort scharf schalten (Automatik/Restore: ohne Ausgangsverzögerung/Code)."""
         self._clear_timers()
         self._arm_mode = target
         self._reason = None
         self._set(target)
+        self._check_active_open()
+
+    @callback
+    def _check_active_open(self) -> None:
+        """Nach dem Scharfschalten: ein bereits offener, scharfer Sensor löst aus (#5)."""
+        if self._attr_alarm_state not in _ARMED_STATES:
+            return
+        mode = self._arm_mode.value if self._arm_mode else None
+        for cfg in self._sensors:
+            if cfg.get(CONF_ALWAYS) or cfg[CONF_ENTITY_ID] in self._bypassed:
+                continue
+            if mode not in cfg.get(CONF_MODES, []):
+                continue
+            st = self.hass.states.get(cfg[CONF_ENTITY_ID])
+            if st is None or st.state != STATE_ON:
+                continue
+            name = st.name or cfg[CONF_ENTITY_ID]
+            if cfg.get(CONF_DELAYED, False) and self._entry_delay > 0:
+                self._start_pending(name)
+            else:
+                self._trigger(name)
+            return
 
     @callback
     def _start_pending(self, reason: str) -> None:
+        self._begin_pending(self._entry_delay, reason)
+
+    @callback
+    def _begin_pending(self, seconds: int, reason: str) -> None:
         self._reason = reason
-        self._timer_end = dt_util.utcnow() + timedelta(seconds=self._entry_delay)
-        self._cancel_pending = async_call_later(
-            self.hass, self._entry_delay, self._pending_elapsed
-        )
+        self._timer_end = dt_util.utcnow() + timedelta(seconds=seconds)
+        self._cancel_pending = async_call_later(self.hass, seconds, self._pending_elapsed)
         self._set(AlarmControlPanelState.PENDING)
 
     @callback
@@ -861,17 +1001,14 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
         self._trigger(self._reason or "Sensor")
 
     @callback
-    def _trigger(self, reason: str) -> None:
+    def _trigger(self, reason: str, duration: int | None = None) -> None:
         self._clear_timers()
         self._reason = reason
         _LOGGER.info("Frickelalarm '%s' ausgelöst durch: %s", self.name, reason)
-        if self._trigger_duration > 0:
-            self._timer_end = dt_util.utcnow() + timedelta(
-                seconds=self._trigger_duration
-            )
-            self._cancel_trigger = async_call_later(
-                self.hass, self._trigger_duration, self._trigger_elapsed
-            )
+        dur = self._trigger_duration if duration is None else duration
+        if dur > 0:
+            self._timer_end = dt_util.utcnow() + timedelta(seconds=dur)
+            self._cancel_trigger = async_call_later(self.hass, dur, self._trigger_elapsed)
         self._set(AlarmControlPanelState.TRIGGERED)
 
     @callback
@@ -886,8 +1023,9 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
 
     # --- Dienste des Bedienfelds -----------------------------------------
     async def async_alarm_disarm(self, code: str | None = None) -> None:
+        # Standard: gesetzter Code schützt auch das Unscharfschalten (#6)
         self._validate(
-            code, bool(self._entry.options.get(CONF_CODE_DISARM_REQUIRED, False))
+            code, bool(self._entry.options.get(CONF_CODE_DISARM_REQUIRED, True))
         )
         self._disarm_internal()
 
@@ -968,9 +1106,16 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
     # --- Konfiguration per Dienst (Phase 7, auch für LLM/MCP) -------------
     @callback
     def _update_options(self, changes: dict[str, Any]) -> None:
-        """Optionen ändern und Eintrag neu laden (über den Update-Listener)."""
+        """Optionen ändern; die Entität aktualisiert sich live (Listener → Dispatcher, kein Reload)."""
         new_options = {**self._entry.options, **changes}
         self.hass.config_entries.async_update_entry(self._entry, options=new_options)
+
+    def _require_disarmed(self) -> None:
+        """Konfig-Dienste nur im unscharfen Zustand zulassen (#2)."""
+        if self._attr_alarm_state != AlarmControlPanelState.DISARMED:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN, translation_key="config_requires_disarmed"
+            )
 
     async def async_add_sensor(
         self,
@@ -980,11 +1125,23 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
         always: bool = False,
     ) -> None:
         """Einen Sensor hinzufügen oder (bei gleicher entity_id) aktualisieren."""
+        self._require_disarmed()
+        # Existenz + passende Domäne prüfen (#7)
+        if (
+            self.hass.states.get(sensor) is None
+            or sensor.split(".")[0] not in ("binary_sensor", "input_boolean")
+        ):
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="invalid_sensor",
+                translation_placeholders={"sensor": sensor},
+            )
         sensors = [dict(s) for s in self._sensors if s[CONF_ENTITY_ID] != sensor]
         sensors.append(
             {
                 CONF_ENTITY_ID: sensor,
-                CONF_MODES: list(modes) if modes else list(ARM_MODES),
+                # ohne Angabe sichere Standard-Modi (nicht armed_home, #7)
+                CONF_MODES: list(modes) if modes else list(SAFE_DEFAULT_MODES),
                 CONF_DELAYED: bool(delayed),
                 CONF_ALWAYS: bool(always),
             }
@@ -993,6 +1150,7 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
 
     async def async_remove_sensor(self, sensor: str) -> None:
         """Einen Sensor entfernen."""
+        self._require_disarmed()
         sensors = [s for s in self._sensors if s[CONF_ENTITY_ID] != sensor]
         self._update_options({CONF_SENSORS: sensors})
 
@@ -1003,6 +1161,7 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
         trigger_duration: int | None = None,
     ) -> None:
         """Verzögerungen und Alarmdauer setzen (nur angegebene Werte)."""
+        self._require_disarmed()
         changes: dict[str, Any] = {}
         if exit_delay is not None:
             changes[CONF_EXIT_DELAY] = int(exit_delay)
@@ -1021,6 +1180,7 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
         notify_events: list[str] | None = None,
     ) -> None:
         """Reaktionen setzen (nur angegebene Werte)."""
+        self._require_disarmed()
         changes: dict[str, Any] = {}
         if sirens is not None:
             changes[CONF_SIRENS] = list(sirens)
@@ -1040,6 +1200,7 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
         night_schedule: bool | None = None,
     ) -> None:
         """Automatik-Schalter zur Laufzeit setzen (auch für LLM/MCP)."""
+        self._require_disarmed()
         changes: dict[str, Any] = {}
         if auto_arm is not None:
             changes[CONF_AUTO_ARM] = auto_arm
@@ -1061,6 +1222,9 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
             "trigger_duration": self._trigger_duration,
             "code_set": bool(self._code),
             "tamper_detection": self._tamper_enabled,
+            "tamper_triggers": bool(
+                o.get(CONF_TAMPER_TRIGGERS, DEFAULT_TAMPER_TRIGGERS)
+            ),
             "open_on_arm": self._open_on_arm,
             "sensors": self._sensors,
             "sirens": o.get(CONF_SIRENS) or [],
@@ -1077,5 +1241,8 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
                 "night_start": o.get(CONF_NIGHT_START, DEFAULT_NIGHT_START),
                 "night_end": o.get(CONF_NIGHT_END, DEFAULT_NIGHT_END),
                 "night_require_home": bool(o.get(CONF_NIGHT_REQUIRE_HOME, False)),
+                "auto_disarm_during_alarm": bool(
+                    o.get(CONF_AUTO_DISARM_DURING_ALARM, DEFAULT_AUTO_DISARM_DURING_ALARM)
+                ),
             },
         }

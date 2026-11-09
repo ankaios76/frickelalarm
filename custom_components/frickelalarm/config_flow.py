@@ -39,6 +39,7 @@ from .const import (
     CONF_AUTO_ARM_DELAY,
     CONF_AUTO_ARM_MODE,
     CONF_AUTO_DISARM,
+    CONF_AUTO_DISARM_DURING_ALARM,
     CONF_CODE,
     CONF_CODE_ARM_REQUIRED,
     CONF_CODE_DISARM_REQUIRED,
@@ -59,6 +60,7 @@ from .const import (
     CONF_SENSORS,
     CONF_SIRENS,
     CONF_TAMPER,
+    CONF_TAMPER_TRIGGERS,
     CONF_TRIGGER_DURATION,
     DEFAULT_AUTO_ARM_DELAY,
     DEFAULT_AUTO_ARM_MODE,
@@ -67,9 +69,11 @@ from .const import (
     DEFAULT_NAME,
     DEFAULT_NIGHT_END,
     DEFAULT_NIGHT_START,
+    DEFAULT_AUTO_DISARM_DURING_ALARM,
     DEFAULT_NOTIFY_MESSAGE,
     DEFAULT_OPEN_ON_ARM,
     DEFAULT_TAMPER,
+    DEFAULT_TAMPER_TRIGGERS,
     DEFAULT_TRIGGER_DURATION,
     DOMAIN,
     NOTIFY_EVENT_LABELS,
@@ -103,7 +107,7 @@ class FrickelalarmConfigFlow(ConfigFlow, domain=DOMAIN):
                     CONF_CODE: (user_input.get(CONF_CODE) or "").strip(),
                     CONF_CODE_ARM_REQUIRED: user_input.get(CONF_CODE_ARM_REQUIRED, False),
                     CONF_CODE_DISARM_REQUIRED: user_input.get(
-                        CONF_CODE_DISARM_REQUIRED, False
+                        CONF_CODE_DISARM_REQUIRED, True
                     ),
                     CONF_SENSORS: [],
                     CONF_EXIT_DELAY: DEFAULT_EXIT_DELAY,
@@ -121,7 +125,7 @@ class FrickelalarmConfigFlow(ConfigFlow, domain=DOMAIN):
                 vol.Required(CONF_NAME, default=DEFAULT_NAME): str,
                 vol.Optional(CONF_CODE, default=""): str,
                 vol.Optional(CONF_CODE_ARM_REQUIRED, default=False): bool,
-                vol.Optional(CONF_CODE_DISARM_REQUIRED, default=False): bool,
+                vol.Optional(CONF_CODE_DISARM_REQUIRED, default=True): bool,
             }
         )
         return self.async_show_form(
@@ -180,6 +184,9 @@ class FrickelalarmOptionsFlow(OptionsFlow):
                     CONF_NIGHT_REQUIRE_HOME: user_input.get(
                         CONF_NIGHT_REQUIRE_HOME, False
                     ),
+                    CONF_AUTO_DISARM_DURING_ALARM: user_input.get(
+                        CONF_AUTO_DISARM_DURING_ALARM, False
+                    ),
                 }
             )
 
@@ -230,6 +237,12 @@ class FrickelalarmOptionsFlow(OptionsFlow):
                 vol.Optional(
                     CONF_NIGHT_REQUIRE_HOME,
                     default=opts.get(CONF_NIGHT_REQUIRE_HOME, False),
+                ): BooleanSelector(),
+                vol.Optional(
+                    CONF_AUTO_DISARM_DURING_ALARM,
+                    default=opts.get(
+                        CONF_AUTO_DISARM_DURING_ALARM, DEFAULT_AUTO_DISARM_DURING_ALARM
+                    ),
                 ): BooleanSelector(),
             }
         )
@@ -313,37 +326,50 @@ class FrickelalarmOptionsFlow(OptionsFlow):
     async def async_step_general(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        opts = self.config_entry.options
         if user_input is not None:
+            # Leeres Code-Feld = Code unverändert lassen (nicht versehentlich löschen)
+            entered = (user_input.get(CONF_CODE) or "").strip()
+            code = entered if entered else opts.get(CONF_CODE, "")
             return self._save(
                 {
-                    CONF_CODE: (user_input.get(CONF_CODE) or "").strip(),
+                    CONF_CODE: code,
                     CONF_CODE_ARM_REQUIRED: user_input.get(
                         CONF_CODE_ARM_REQUIRED, False
                     ),
                     CONF_CODE_DISARM_REQUIRED: user_input.get(
-                        CONF_CODE_DISARM_REQUIRED, False
+                        CONF_CODE_DISARM_REQUIRED, True
                     ),
                     CONF_TAMPER: user_input.get(CONF_TAMPER, DEFAULT_TAMPER),
+                    CONF_TAMPER_TRIGGERS: user_input.get(
+                        CONF_TAMPER_TRIGGERS, DEFAULT_TAMPER_TRIGGERS
+                    ),
                     CONF_OPEN_ON_ARM: user_input.get(
                         CONF_OPEN_ON_ARM, DEFAULT_OPEN_ON_ARM
                     ),
                 }
             )
 
-        opts = self.config_entry.options
         schema = vol.Schema(
             {
-                vol.Optional(CONF_CODE, default=opts.get(CONF_CODE, "")): str,
+                # Kein Vorbelegen des Codes – Passwortfeld; leer = unverändert
+                vol.Optional(CONF_CODE, default=""): TextSelector(
+                    TextSelectorConfig(type=TextSelectorType.PASSWORD)
+                ),
                 vol.Optional(
                     CONF_CODE_ARM_REQUIRED,
                     default=opts.get(CONF_CODE_ARM_REQUIRED, False),
-                ): bool,
+                ): BooleanSelector(),
                 vol.Optional(
                     CONF_CODE_DISARM_REQUIRED,
-                    default=opts.get(CONF_CODE_DISARM_REQUIRED, False),
-                ): bool,
+                    default=opts.get(CONF_CODE_DISARM_REQUIRED, True),
+                ): BooleanSelector(),
                 vol.Optional(
                     CONF_TAMPER, default=opts.get(CONF_TAMPER, DEFAULT_TAMPER)
+                ): BooleanSelector(),
+                vol.Optional(
+                    CONF_TAMPER_TRIGGERS,
+                    default=opts.get(CONF_TAMPER_TRIGGERS, DEFAULT_TAMPER_TRIGGERS),
                 ): BooleanSelector(),
                 vol.Optional(
                     CONF_OPEN_ON_ARM,

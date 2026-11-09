@@ -7,7 +7,7 @@
 <p align="center">
   <img alt="HACS Custom" src="https://img.shields.io/badge/HACS-Custom-1f3b39?style=flat-square">
   <img alt="Home Assistant 2026.2+" src="https://img.shields.io/badge/Home%20Assistant-2026.2%2B-1f3b39?style=flat-square">
-  <img alt="Version 0.11.0-beta" src="https://img.shields.io/badge/Version-0.11.0--beta-f0b44c?style=flat-square">
+  <img alt="Version 0.11.0-beta" src="https://img.shields.io/badge/Version-0.12.0--beta-f0b44c?style=flat-square">
   <img alt="License MIT" src="https://img.shields.io/badge/License-MIT-1f3b39?style=flat-square">
   <a href="https://github.com/ankaios76/frickelalarm/actions/workflows/validate.yml"><img alt="CI" src="https://github.com/ankaios76/frickelalarm/actions/workflows/validate.yml/badge.svg"></a>
 </p>
@@ -21,12 +21,12 @@
   <img src="https://raw.githubusercontent.com/ankaios76/frickelalarm/main/docs/card.png" width="360" alt="The Frickelalarm card on a dashboard">
 </p>
 
-> **Status: 0.11.0 – public beta.** Engine with reactions and convenience features, presence/time
+> **Status: 0.12.0 – public beta.** Engine with reactions and convenience features, presence/time
 > automation, its own Lovelace card and tamper detection – and, uniquely, **configurable through
 > services / an LLM (MCP)**. Automated test suite and CI (hassfest + HACS + pytest). See
 > [CONCEPT.md](CONCEPT.md) (German). Feedback and testers are very welcome.
 
-## What already works (0.11.0)
+## What already works (0.12.0)
 
 - Control panel (`alarm_control_panel`) with the modes **Home / Away / Night / Vacation**
 - **Per-mode sensor selection**: decide for each sensor which modes it is armed in
@@ -57,7 +57,7 @@
   the first person returns, and **night mode on a schedule**
 - **Configuration through services** (`add_sensor`, `remove_sensor`, `set_times`, `set_reactions`,
   `set_automation`, `get_config`) – so it can also be set up by an LLM via the Home Assistant MCP server
-- State survives restarts
+- State survives restarts – including a running alarm, delay or bypass (resumed after a restart)
 
 ## Interface
 

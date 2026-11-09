@@ -11,8 +11,9 @@ import os
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 
-from .const import DOMAIN, PLATFORMS
+from .const import DOMAIN, PLATFORMS, SIGNAL_OPTIONS_UPDATED
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -54,5 +55,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Neu laden, wenn Optionen geändert wurden."""
-    await hass.config_entries.async_reload(entry.entry_id)
+    """Optionen geändert: die Entität aktualisiert sich live.
+
+    Bewusst KEIN async_reload – ein Reload würde die Entität neu aufbauen und dabei
+    einen laufenden Alarm (arming/pending/triggered) verlieren. Die Properties lesen
+    die Optionen live; die Entität muss nur Sensoren/Automatik neu verdrahten.
+    """
+    async_dispatcher_send(hass, SIGNAL_OPTIONS_UPDATED.format(entry.entry_id))

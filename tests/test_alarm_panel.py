@@ -4,13 +4,14 @@ from datetime import timedelta
 
 import pytest
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, State
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import entity_registry as er
 import homeassistant.util.dt as dt_util
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
+    mock_restore_cache_with_extra_data,
 )
 
 from custom_components.frickelalarm.const import (
@@ -310,6 +311,42 @@ async def test_open_on_arm_bypass_and_remonitor(hass: HomeAssistant) -> None:
     hass.states.async_set("binary_sensor.door", "off")
     await hass.async_block_till_done()
     assert hass.states.get(eid).attributes["umgangene_sensoren"] == []
+
+
+async def test_config_service_rejected_while_armed(hass: HomeAssistant) -> None:
+    _, eid = await _setup(hass, _opts())
+    await _call(hass, "alarm_control_panel", "alarm_arm_away", {"entity_id": eid})
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(
+            DOMAIN, "set_times", {"entity_id": eid, "exit_delay": 5}, blocking=True
+        )
+    assert _state(hass, eid) == "armed_away"
+
+
+async def test_restore_running_alarm(hass: HomeAssistant) -> None:
+    entry = MockConfigEntry(
+        domain=DOMAIN, title="Test", data={"name": "Test"}, options=_opts(), unique_id="t"
+    )
+    entry.add_to_hass(hass)
+    mock_restore_cache_with_extra_data(
+        hass,
+        (
+            (
+                State("alarm_control_panel.test", "armed_away"),
+                {
+                    "arm_mode": "armed_away",
+                    "reason": None,
+                    "timer_end": None,
+                    "night_active": False,
+                    "bypassed": [],
+                },
+            ),
+        ),
+    )
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    st = hass.states.get("alarm_control_panel.test")
+    assert st is not None and st.state == "armed_away"  # nicht mehr still disarmed (#1b)
 
 
 async def test_code_required_rejects_wrong_code(hass: HomeAssistant) -> None:

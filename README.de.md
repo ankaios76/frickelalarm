@@ -7,7 +7,7 @@
 <p align="center">
   <img alt="HACS Custom" src="https://img.shields.io/badge/HACS-Custom-1f3b39?style=flat-square">
   <img alt="Home Assistant 2026.2+" src="https://img.shields.io/badge/Home%20Assistant-2026.2%2B-1f3b39?style=flat-square">
-  <img alt="Version 0.11.0-beta" src="https://img.shields.io/badge/Version-0.11.0--beta-f0b44c?style=flat-square">
+  <img alt="Version 0.11.0-beta" src="https://img.shields.io/badge/Version-0.12.0--beta-f0b44c?style=flat-square">
   <img alt="License MIT" src="https://img.shields.io/badge/License-MIT-1f3b39?style=flat-square">
   <a href="https://github.com/ankaios76/frickelalarm/actions/workflows/validate.yml"><img alt="CI" src="https://github.com/ankaios76/frickelalarm/actions/workflows/validate.yml/badge.svg"></a>
 </p>
@@ -21,12 +21,12 @@
   <img src="https://raw.githubusercontent.com/ankaios76/frickelalarm/main/docs/card.png" width="360" alt="Die Frickelalarm-Karte im Dashboard">
 </p>
 
-> **Status: 0.11.0 – öffentliche Beta.** Engine mit Reaktionen und Komfort, Präsenz-/Zeit-Automatik,
+> **Status: 0.12.0 – öffentliche Beta.** Engine mit Reaktionen und Komfort, Präsenz-/Zeit-Automatik,
 > eigene Lovelace-Karte und Sabotage-Erkennung – und als Einziges **per Dienst/LLM (MCP)
 > konfigurierbar**. Automatisierte Test-Suite und CI (hassfest + HACS + pytest). Siehe
 > [CONCEPT.md](CONCEPT.md). Rückmeldungen und Tester sind ausdrücklich willkommen.
 
-## Was schon funktioniert (0.11.0)
+## Was schon funktioniert (0.12.0)
 
 - Bedienfeld (`alarm_control_panel`) mit den Modi **Zuhause / Abwesend / Nacht / Urlaub**
 - **Sensorauswahl je Modus**: pro Sensor festlegen, in welchen Modi er scharf ist
@@ -57,7 +57,7 @@
   **Auto-unscharf** bei Heimkehr der ersten Person, und **Nachtmodus nach Zeitplan**
 - **Konfiguration per Dienst** (`add_sensor`, `remove_sensor`, `set_times`, `set_reactions`,
   `set_automation`, `get_config`) – damit auch per LLM über den Home-Assistant-MCP-Server einrichtbar
-- Zustand übersteht Neustarts
+- Zustand übersteht Neustarts – auch ein laufender Alarm, eine Verzögerung oder Bypass werden nach einem Neustart fortgesetzt
 
 ## Oberfläche
 

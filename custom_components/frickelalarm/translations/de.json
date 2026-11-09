@@ -41,7 +41,8 @@
           "night_schedule": "Nachtmodus nach Zeitplan",
           "night_start": "Nachtmodus Beginn",
           "night_end": "Nachtmodus Ende",
-          "night_require_home": "Nachtmodus nur, wenn jemand zuhause ist"
+          "night_require_home": "Nachtmodus nur, wenn jemand zuhause ist",
+          "auto_disarm_during_alarm": "Auto-Unscharf auch während eines laufenden Alarms"
         }
       },
       "actions": {
@@ -61,6 +62,7 @@
           "code_arm_required": "Code zum Scharfschalten nötig",
           "code_disarm_required": "Code zum Unscharfschalten nötig",
           "tamper_detection": "Sabotage/Signalverlust melden (Sensor unerreichbar, während scharf)",
+          "tamper_triggers": "Sabotage löst Alarm aus (nicht nur melden)",
           "open_on_arm": "Offene Sensoren beim Scharfschalten"
         }
       },
@@ -180,6 +182,12 @@
     },
     "sensors_open": {
       "message": "Scharfschalten nicht möglich – offene Sensoren: {sensors}"
+    },
+    "config_requires_disarmed": {
+      "message": "Konfigurationsänderungen sind nur im unscharfen Zustand möglich."
+    },
+    "invalid_sensor": {
+      "message": "Unbekannter oder ungeeigneter Sensor: {sensor} (nur binary_sensor oder input_boolean)."
     }
   }
 }
