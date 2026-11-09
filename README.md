@@ -1,14 +1,28 @@
-# Frickelalarm
+<p align="center">
+  <img src="https://raw.githubusercontent.com/ankaios76/frickelalarm/main/docs/header.png" width="720" alt="Frickelalarm – Alarmanlage für Home Assistant, powered by Frickelfabrik">
+</p>
 
-Eine per UI konfigurierbare **Alarmanlagen-Integration für Home Assistant** – mit eigener
-Alarm-Engine (Modi, Ein-/Ausgangsverzögerung, echtes Auslösen) und Mehrbereich-Unterstützung.
-Installierbar über HACS bzw. den **Home Assistant Marketplace**.
+<p align="center">
+  <img alt="HACS Custom" src="https://img.shields.io/badge/HACS-Custom-1f3b39?style=flat-square">
+  <img alt="Home Assistant 2026.2+" src="https://img.shields.io/badge/Home%20Assistant-2026.2%2B-1f3b39?style=flat-square">
+  <img alt="Version 0.11.0-beta" src="https://img.shields.io/badge/Version-0.11.0--beta-f0b44c?style=flat-square">
+  <img alt="License MIT" src="https://img.shields.io/badge/License-MIT-1f3b39?style=flat-square">
+  <a href="https://github.com/ankaios76/frickelalarm/actions/workflows/validate.yml"><img alt="CI" src="https://github.com/ankaios76/frickelalarm/actions/workflows/validate.yml/badge.svg"></a>
+</p>
 
-> **Status: 0.11.0 – öffentliche Beta.** Die Engine läuft inklusive **Reaktionen**, **Komfort**,
-> einer **eigenen Lovelace-Karte** und **Konfiguration per Dienst** – damit lässt sich Frickelalarm
-> auch von einem LLM über den **Home-Assistant-MCP-Server** einrichten. Dazu eine automatisierte
-> Test-Suite, CI (hassfest + HACS + pytest) und ein eigenes Icon. Siehe [CONCEPT.md](CONCEPT.md).
-> Rückmeldungen und Tester sind ausdrücklich willkommen.
+<p align="center">
+  <b>Eine vollwertige Alarmanlage für Home Assistant – per Oberfläche eingerichtet, per Dienst (und damit per LLM über MCP) steuerbar.</b><br>
+  Ausführliche Doku: <a href="https://frickelfabrik.de/blog/frickelalarm-doku/">Deutsch</a> · <a href="https://frickelfabrik.de/blog/frickelalarm-doku-en/">English</a>
+</p>
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/ankaios76/frickelalarm/main/docs/card.png" width="360" alt="Die Frickelalarm-Karte im Dashboard">
+</p>
+
+> **Status: 0.11.0 – öffentliche Beta.** Engine mit Reaktionen und Komfort, Präsenz-/Zeit-Automatik,
+> eigene Lovelace-Karte und Sabotage-Erkennung – und als Einziges **per Dienst/LLM (MCP)
+> konfigurierbar**. Automatisierte Test-Suite und CI (hassfest + HACS + pytest). Siehe
+> [CONCEPT.md](CONCEPT.md). Rückmeldungen und Tester sind ausdrücklich willkommen.
 
 ## Was schon funktioniert (0.11.0)
 
@@ -42,6 +56,21 @@ Installierbar über HACS bzw. den **Home Assistant Marketplace**.
 - **Konfiguration per Dienst** (`add_sensor`, `remove_sensor`, `set_times`, `set_reactions`,
   `set_automation`, `get_config`) – damit auch per LLM über den Home-Assistant-MCP-Server einrichtbar
 - Zustand übersteht Neustarts
+
+## Oberfläche
+
+Alles wird menügeführt über die Oberfläche eingerichtet – Code/PIN, Sensoren, Verzögerungen,
+Reaktionen und Automatik:
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/ankaios76/frickelalarm/main/docs/config.png" width="440" alt="Der Konfigurieren-Dialog mit allen Bereichen">
+</p>
+
+Und die **Automatik** nach Anwesenheit und Nachtplan:
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/ankaios76/frickelalarm/main/docs/automatik.png" width="360" alt="Die Automatik-Einstellungen">
+</p>
 
 ## Qualität
 
