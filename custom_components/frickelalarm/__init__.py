@@ -16,7 +16,7 @@ from .const import DOMAIN, PLATFORMS
 
 _LOGGER = logging.getLogger(__name__)
 
-CARD_VERSION = "0.8.0"
+CARD_VERSION = "0.9.0"
 CARD_URL = "/frickelalarm_static/frickelalarm-card.js"
 
 

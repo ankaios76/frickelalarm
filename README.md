@@ -71,10 +71,15 @@ Die Karte wird automatisch registriert. Einfach eine **manuelle Karte** aufs Das
 type: custom:frickelalarm-card
 entity: alarm_control_panel.haus_frickelalarm
 name: Haus            # optional
+keypad: collapsible   # optional: false (Standard) | true | collapsible
 ```
 
 Sie zeigt Zustand (farbig), Countdown bei Ein-/Ausgangsverzögerung, Auslöser, offene und
 umgangene Sensoren, die Modus-Knöpfe und – falls ein Code gesetzt ist – ein Code-Feld.
+
+**Tastenfeld** (`keypad`): `false` = nur Textfeld (Standard), `true` = Zahlen-Tastenfeld immer
+sichtbar, `collapsible` = über einen Knopf aufklappbar. Die eingegebenen Ziffern werden beim
+Scharf-/Unscharfschalten als Code mitgeschickt.
 
 ## Was noch kommt
 
