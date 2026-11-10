@@ -74,6 +74,7 @@
         "title": "Allgemein",
         "data": {
           "code": "Code (PIN, optional)",
+          "code_remove": "Code entfernen (leeres Feld allein löscht nicht)",
           "code_arm_required": "Code zum Scharfschalten nötig",
           "code_disarm_required": "Code zum Unscharfschalten nötig",
           "tamper_detection": "Sabotage/Signalverlust melden (Sensor unerreichbar, während scharf)",
@@ -219,6 +220,15 @@
     },
     "invalid_sensor": {
       "message": "Unbekannter oder ungeeigneter Sensor: {sensor} (nur binary_sensor oder input_boolean)."
+    },
+    "pin_too_short": {
+      "message": "PIN ist zu kurz (mindestens 4 Zeichen)."
+    },
+    "guest_pin_needs_permanent_code": {
+      "message": "Ein Gast-PIN mit Ablaufdatum ist nur möglich, wenn ein dauerhafter Code (Hauptcode oder ein PIN ohne Ablauf) gesetzt ist – sonst sperrt sich die Anlage nach Ablauf aus."
+    },
+    "last_permanent_code": {
+      "message": "Dieser PIN ist der letzte dauerhafte Code; er kann nicht entfernt werden, solange Gast-PINs übrig sind und kein Hauptcode gesetzt ist."
     }
   }
 }

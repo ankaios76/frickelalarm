@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import dataclasses
 from datetime import timedelta
+from functools import partial
 import hashlib
+import hmac
 import logging
 import os
 from typing import Any
@@ -32,6 +34,8 @@ from homeassistant.const import (
     STATE_UNKNOWN,
 )
 from homeassistant.core import (
+    CALLBACK_TYPE,
+    CoreState,
     Event,
     EventStateChangedData,
     HomeAssistant,
@@ -50,6 +54,7 @@ from homeassistant.helpers.event import (
     async_track_time_change,
 )
 from homeassistant.helpers.restore_state import ExtraStoredData, RestoreEntity
+from homeassistant.helpers.start import async_at_started
 from homeassistant.helpers.template import Template
 import homeassistant.util.dt as dt_util
 
@@ -153,6 +158,26 @@ def _hash_code(code: str, salt_hex: str) -> str:
     return hashlib.pbkdf2_hmac(
         "sha256", str(code).encode("utf-8"), bytes.fromhex(salt_hex), 120000
     ).hex()
+
+
+def _match_code(
+    entered: str, candidates: list[tuple[str | None, str, str]]
+) -> tuple[bool, str | None]:
+    """Eingabe gegen Kandidaten prüfen. Läuft im Executor (PBKDF2 ist teuer).
+
+    candidates: (name, hash, salt); name None = Hauptcode. Konstanter Vergleich.
+    """
+    for name, hashed, salt in candidates:
+        if hmac.compare_digest(_hash_code(entered, salt), hashed):
+            return True, name
+    return False, None
+
+
+# Sabotage/Signalverlust erst nach dieser Karenzzeit melden (Broker-/Mesh-Neustarts
+# lassen Sensoren kurz "unavailable" werden, ohne echte Sabotage, E).
+TAMPER_GRACE = 30
+# Mindestlänge für PINs (#10/D) – verhindert leere/triviale Codes
+MIN_PIN_LENGTH = 4
 
 
 async def async_setup_entry(
@@ -285,6 +310,7 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
         self._unsub_sensors = None
         self._bypassed: set[str] = set()
         self._last_actor: str | None = None  # welcher PIN zuletzt passte (#10)
+        self._tamper_timers: dict[str, CALLBACK_TYPE] = {}  # laufende Karenz-Timer (E)
         # Automatik-Laufzeitstatus
         self._unsub_presence = None
         self._unsub_time: list = []
@@ -556,6 +582,7 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
 
     async def async_will_remove_from_hass(self) -> None:
         self._clear_timers()
+        self._cancel_tamper()
         if self._unsub_sensors is not None:
             self._unsub_sensors()
             self._unsub_sensors = None
@@ -746,9 +773,22 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
         old = self._attr_alarm_state
         self._attr_alarm_state = state
         self.async_write_ha_state()
-        if state != old:
-            self._fire_event(state)
+        if state == old:
+            return
+        self._fire_event(state)
+        if self.hass.state is CoreState.running:
             self._run_reactions(old, state)
+            return
+
+        # Start/Restore: Sirenen und Notify-Dienste existieren evtl. noch nicht
+        # (MQTT/Zigbee2MQTT/Telegram laden ggf. später). Reaktionen bis zum
+        # HA-Start zurückstellen, sonst zielt turn_on/notify ins Leere (C).
+        @callback
+        def _later(_hass: HomeAssistant) -> None:
+            if self._attr_alarm_state == state:
+                self._run_reactions(old, state)
+
+        self.async_on_remove(async_at_started(self.hass, _later))
 
     @callback
     def _fire_event(self, state: AlarmControlPanelState) -> None:
@@ -870,6 +910,24 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
         ):
             self._trigger(f"Sabotage: {sensor_name}")
 
+    @callback
+    def _tamper_elapsed(self, entity_id: str, label: str, _now) -> None:
+        """Karenzzeit abgelaufen: nur melden/auslösen, wenn weiterhin unerreichbar (E)."""
+        self._tamper_timers.pop(entity_id, None)
+        st = self.hass.states.get(entity_id)
+        if self._attr_alarm_state != AlarmControlPanelState.DISARMED and (
+            st is None or st.state in _UNAVAILABLE_STATES
+        ):
+            self._tamper(label)
+
+    @callback
+    def _cancel_tamper(self, entity_id: str | None = None) -> None:
+        """Karenz-Timer abbrechen – für einen Sensor oder (ohne Angabe) alle."""
+        ids = [entity_id] if entity_id else list(self._tamper_timers)
+        for eid in ids:
+            if (cancel := self._tamper_timers.pop(eid, None)) is not None:
+                cancel()
+
     # --- Sensor-Logik -----------------------------------------------------
     @callback
     def _sensor_changed(self, event: Event[EventStateChangedData]) -> None:
@@ -882,23 +940,31 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
         if cfg is None:
             return
 
-        # Sabotage/Signalverlust: erreichbar -> unerreichbar, während scharf
+        # Sabotage/Signalverlust: erreichbar -> unerreichbar, während scharf.
+        # Nur für im aktuellen Modus relevante Sensoren und mit Karenzzeit, damit
+        # ein Broker-/Mesh-Neustart keine Alarm-/Meldungsflut auslöst (E).
         if (
             self._tamper_enabled
             and self._attr_alarm_state != AlarmControlPanelState.DISARMED
         ):
-            was_avail = old_state is not None and old_state.state not in (
-                STATE_UNAVAILABLE,
-                STATE_UNKNOWN,
+            relevant = bool(cfg.get(CONF_ALWAYS)) or (
+                entity_id not in self._bypassed
+                and self._arm_mode is not None
+                and self._arm_mode.value in cfg.get(CONF_MODES, [])
             )
-            now_unavail = new_state is None or new_state.state in (
-                STATE_UNAVAILABLE,
-                STATE_UNKNOWN,
-            )
-            if was_avail and now_unavail:
-                self._tamper(
-                    old_state.name if old_state and old_state.name else entity_id
+            was_avail = old_state is not None and old_state.state not in _UNAVAILABLE_STATES
+            now_unavail = new_state is None or new_state.state in _UNAVAILABLE_STATES
+            if relevant and was_avail and now_unavail:
+                self._cancel_tamper(entity_id)
+                label = (old_state.name if old_state and old_state.name else entity_id)
+                self._tamper_timers[entity_id] = async_call_later(
+                    self.hass,
+                    TAMPER_GRACE,
+                    partial(self._tamper_elapsed, entity_id, label),
                 )
+            elif not now_unavail:
+                # Sensor wieder erreichbar -> kein Sabotagefall
+                self._cancel_tamper(entity_id)
 
         # Auto-Re-Monitor: umgangener Sensor wieder geschlossen -> Umgehung aufheben
         if (
@@ -955,26 +1021,34 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
             self._trigger(name)
 
     # --- Zustandsübergänge ------------------------------------------------
-    def _validate(self, code: str | None, required: bool) -> None:
-        """Code gegen Hauptcode (gehasht) und aktive PINs prüfen (#6/#10)."""
+    async def _validate(self, code: str | None, required: bool) -> None:
+        """Code gegen Hauptcode (gehasht) und aktive PINs prüfen (#6/#10).
+
+        Das teure PBKDF2-Hashing läuft im Executor, damit der Event-Loop bei
+        falscher Eingabe nicht blockiert (F).
+        """
         self._last_actor = None
         if not self._any_code_required or not required:
             return
         entered = str(code or "")
         o = self._entry.options
 
+        candidates: list[tuple[str | None, str, str]] = []
         if self._code_set:
             h = o.get(CONF_CODE_HASH)
             s = o.get(CONF_CODE_SALT)
-            if h and s and _hash_code(entered, s) == h:
-                return  # Hauptcode
-
+            if h and s:
+                candidates.append((None, h, s))  # Hauptcode
         for pin in self._active_pins:
-            if pin.get("hash") and pin.get("salt") and _hash_code(
-                entered, pin["salt"]
-            ) == pin["hash"]:
-                self._last_actor = pin.get("name")
-                return
+            if pin.get("hash") and pin.get("salt"):
+                candidates.append((pin.get("name"), pin["hash"], pin["salt"]))
+
+        ok, name = await self.hass.async_add_executor_job(
+            _match_code, entered, candidates
+        )
+        if ok:
+            self._last_actor = name
+            return
 
         raise ServiceValidationError(
             translation_domain=DOMAIN, translation_key="invalid_code"
@@ -1004,7 +1078,7 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
             self._send_notification(service, message)
 
     async def _arm(self, target: AlarmControlPanelState, code: str | None) -> None:
-        self._validate(code, self.code_arm_required)
+        await self._validate(code, self.code_arm_required)
 
         # Offene/unerreichbare Sensoren beim Scharfschalten behandeln
         open_ids = self._open_active_sensors(target)
@@ -1053,8 +1127,21 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
 
     @callback
     def _arm_now(self, target: AlarmControlPanelState) -> None:
-        """Sofort scharf schalten (Automatik/Restore: ohne Ausgangsverzögerung/Code)."""
+        """Sofort scharf schalten (Automatik: ohne Ausgangsverzögerung/Code).
+
+        Wendet open_on_arm wie beim manuellen Scharfschalten an, damit Auto-scharf
+        und Nachtplan bei offenem Sensor nicht sofort Alarm auslösen (A).
+        """
+        open_ids = self._open_active_sensors(target)
+        if open_ids and self._open_on_arm == "block":
+            names = ", ".join(self._entity_label(e) for e in open_ids)
+            self._report(
+                f"Automatisch scharf schalten abgebrochen – offen/unerreichbar: {names}"
+            )
+            return
         self._clear_timers()
+        if open_ids and self._open_on_arm == "bypass":
+            self._bypassed.update(open_ids)
         self._arm_mode = target
         self._reason = None
         self._last_actor = None
@@ -1063,24 +1150,24 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
 
     @callback
     def _check_active_open(self) -> None:
-        """Nach dem Scharfschalten: ein bereits offener, scharfer Sensor löst aus (#5)."""
-        if self._attr_alarm_state not in _ARMED_STATES:
+        """Nach dem Scharfschalten noch offene/unerreichbare, scharfe Sensoren melden (A).
+
+        KEIN Alarm: ein noch offener Sensor löst ohnehin aus, sobald er einmal aus
+        und wieder an geht (neue Flanke). „Trotzdem scharf" soll nicht faktisch
+        „Alarm nach der Ausgangsverzögerung" bedeuten.
+        """
+        if self._attr_alarm_state not in _ARMED_STATES or self._arm_mode is None:
             return
-        mode = self._arm_mode.value if self._arm_mode else None
-        for cfg in self._sensors:
-            if cfg.get(CONF_ALWAYS) or cfg[CONF_ENTITY_ID] in self._bypassed:
-                continue
-            if mode not in cfg.get(CONF_MODES, []):
-                continue
-            st = self.hass.states.get(cfg[CONF_ENTITY_ID])
-            if st is None or st.state != STATE_ON:
-                continue
-            name = st.name or cfg[CONF_ENTITY_ID]
-            if cfg.get(CONF_DELAYED, False) and self._entry_delay_for(self._arm_mode) > 0:
-                self._start_pending(name)
-            else:
-                self._trigger(name)
-            return
+        still_open = [
+            self._entity_label(eid)
+            for eid in self._open_active_sensors(self._arm_mode)
+            if eid not in self._bypassed
+        ]
+        if still_open:
+            self._report(
+                "Scharf, aber noch offen/unerreichbar (überwacht ab Schließen): "
+                + ", ".join(still_open)
+            )
 
     @callback
     def _start_pending(self, reason: str) -> None:
@@ -1123,7 +1210,7 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
     # --- Dienste des Bedienfelds -----------------------------------------
     async def async_alarm_disarm(self, code: str | None = None) -> None:
         # Standard: gesetzter Code schützt auch das Unscharfschalten (#6)
-        self._validate(
+        await self._validate(
             code, bool(self._entry.options.get(CONF_CODE_DISARM_REQUIRED, True))
         )
         self._disarm_internal()
@@ -1132,6 +1219,7 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
     def _disarm_internal(self) -> None:
         """Unscharf schalten ohne Code-Prüfung (auch für Automatik)."""
         self._clear_timers()
+        self._cancel_tamper()
         if self._cancel_autoarm is not None:
             self._cancel_autoarm()
             self._cancel_autoarm = None
@@ -1315,33 +1403,59 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
     ) -> None:
         """Einen persönlichen oder Gast-PIN hinzufügen/aktualisieren (#10)."""
         self._require_disarmed()
-        salt = _new_salt()
-        vu = valid_until.timestamp() if valid_until is not None else None
-        pins = [
+        pin = str(pin).strip()
+        if len(pin) < MIN_PIN_LENGTH:  # D: leere/zu kurze PIN ablehnen
+            raise ServiceValidationError(
+                translation_domain=DOMAIN, translation_key="pin_too_short"
+            )
+        others = [
             p
             for p in (self._entry.options.get(CONF_PINS) or [])
             if p.get("name") != name
         ]
-        pins.append(
+        # B: Gast-PIN (mit Ablauf) nur, wenn es einen dauerhaften Ausweg gibt –
+        # sonst sperrt sich die Anlage nach Ablauf aus (remove_pin ist scharf gesperrt).
+        has_permanent = self._code_set or any(
+            p.get("valid_until") is None for p in others
+        )
+        if valid_until is not None and not has_permanent:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="guest_pin_needs_permanent_code",
+            )
+        # H: Zeit ohne Zeitzone als HA-Zeitzone interpretieren (nicht Prozess-TZ)
+        vu = dt_util.as_utc(valid_until).timestamp() if valid_until is not None else None
+        salt = _new_salt()
+        hashed = await self.hass.async_add_executor_job(_hash_code, pin, salt)  # F
+        others.append(
             {
                 "name": name,
-                "hash": _hash_code(pin, salt),
+                "hash": hashed,
                 "salt": salt,
-                "is_number": str(pin).isdigit(),
+                "is_number": pin.isdigit(),
                 "valid_until": vu,
             }
         )
-        self._update_options({CONF_PINS: pins})
+        self._update_options({CONF_PINS: others})
 
     async def async_remove_pin(self, name: str) -> None:
         """Einen PIN entfernen (Benutzer sperren, #10)."""
         self._require_disarmed()
-        pins = [
-            p
-            for p in (self._entry.options.get(CONF_PINS) or [])
-            if p.get("name") != name
-        ]
-        self._update_options({CONF_PINS: pins})
+        pins = self._entry.options.get(CONF_PINS) or []
+        target = next((p for p in pins if p.get("name") == name), None)
+        if target is None:
+            return
+        remaining = [p for p in pins if p.get("name") != name]
+        # B: den letzten dauerhaften Code nicht entfernen, solange Gast-PINs übrig
+        # sind und kein Hauptcode gesetzt ist (sonst Aussperrung nach deren Ablauf).
+        if target.get("valid_until") is None and not self._code_set:
+            other_permanent = any(p.get("valid_until") is None for p in remaining)
+            has_guest = any(p.get("valid_until") is not None for p in remaining)
+            if has_guest and not other_permanent:
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN, translation_key="last_permanent_code"
+                )
+        self._update_options({CONF_PINS: remaining})
 
     async def async_get_config(self) -> ServiceResponse:
         """Aktuelle Konfiguration zurückgeben (für LLM/MCP und Automationen)."""

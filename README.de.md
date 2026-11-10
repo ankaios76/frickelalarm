@@ -7,7 +7,7 @@
 <p align="center">
   <img alt="HACS Custom" src="https://img.shields.io/badge/HACS-Custom-1f3b39?style=flat-square">
   <img alt="Home Assistant 2026.2+" src="https://img.shields.io/badge/Home%20Assistant-2026.2%2B-1f3b39?style=flat-square">
-  <img alt="Version 0.13.0-beta" src="https://img.shields.io/badge/Version-0.13.0--beta-f0b44c?style=flat-square">
+  <img alt="Version 0.14.0-beta" src="https://img.shields.io/badge/Version-0.14.0--beta-f0b44c?style=flat-square">
   <img alt="License MIT" src="https://img.shields.io/badge/License-MIT-1f3b39?style=flat-square">
   <a href="https://github.com/ankaios76/frickelalarm/actions/workflows/validate.yml"><img alt="CI" src="https://github.com/ankaios76/frickelalarm/actions/workflows/validate.yml/badge.svg"></a>
 </p>
@@ -21,14 +21,16 @@
   <img src="https://raw.githubusercontent.com/ankaios76/frickelalarm/main/docs/card.png" width="360" alt="Die Frickelalarm-Karte im Dashboard">
 </p>
 
-> **Status: 0.13.0 – öffentliche Beta.** Engine mit Reaktionen und Komfort, Präsenz-/Zeit-Automatik,
+> **Status: 0.14.0 – öffentliche Beta.** Engine mit Reaktionen und Komfort, Präsenz-/Zeit-Automatik,
 > eigene Lovelace-Karte und Sabotage-Erkennung – und als Einziges **per Dienst/LLM (MCP)
-> konfigurierbar**. 0.13.0 härtet die Codes: **gehashte Speicherung** (kein Klartext),
-> **persönliche und Gast-PINs** sowie **Aus-/Eingangsverzögerung je Modus**. Automatisierte
-> Test-Suite und CI (hassfest + HACS + pytest). Siehe [CONCEPT.md](CONCEPT.md). Rückmeldungen und
-> Tester sind ausdrücklich willkommen.
+> konfigurierbar**. Codes werden **gehasht** gespeichert (kein Klartext), mit **persönlichen und
+> Gast-PINs** sowie **Aus-/Eingangsverzögerung je Modus**. 0.14.0 arbeitet eine zweite Review-Runde
+> ein: Sabotage-Erkennung nur für scharfe Sensoren mit Karenzzeit, offene Sensoren beim Scharfschalten
+> werden gemeldet (statt still zu eskalieren), Reaktionen erst nach HA-Start, PIN-Härtung.
+> Automatisierte Test-Suite und CI (hassfest + HACS + pytest). Siehe [CONCEPT.md](CONCEPT.md).
+> Rückmeldungen und Tester sind ausdrücklich willkommen.
 
-## Was schon funktioniert (0.13.0)
+## Was schon funktioniert (0.14.0)
 
 - Bedienfeld (`alarm_control_panel`) mit den Modi **Zuhause / Abwesend / Nacht / Urlaub**
 - **Sensorauswahl je Modus**: pro Sensor festlegen, in welchen Modi er scharf ist
@@ -46,7 +48,9 @@
 - **Reaktionen im Alarmfall**: gewählte Aktoren (Sirene/Licht/Schalter) gehen bei `triggered` an
   und danach wieder aus; optionale **Benachrichtigung** je Ereignis mit frei formulierbarem Text
 - optionaler **Code/PIN**, getrennt für Scharf- und/oder Unscharfschalten – **gehasht gespeichert
-  (PBKDF2), nie im Klartext**; bestehende Einträge werden automatisch migriert
+  (PBKDF2), nie im Klartext**; bestehende Einträge werden automatisch migriert. Hinweis: Das Hashing
+  schützt gegen Mitlesen in Oberfläche und Backups, aber kurze Zahlen-PINs lassen sich von jemandem
+  mit Dateizugriff durchprobieren – wähle bei Bedarf einen längeren Code.
 - **Persönliche und Gast-PINs** (`add_pin` / `remove_pin`): zusätzliche Codes je Person, optional mit
   Ablaufdatum (Gast-PIN); bei jedem Auslösen/Unscharfschalten wird vermerkt, welcher Code gehandelt hat (`actor`)
 - **Aus-/Eingangsverzögerung je Modus**: überschreibt die globale Verzögerung für einzelne Modi

@@ -103,3 +103,61 @@ async def test_options_per_mode_delays(hass: HomeAssistant) -> None:
     assert result3["type"] == FlowResultType.CREATE_ENTRY
     assert entry.options[CONF_EXIT_DELAYS] == {"armed_away": 45}
     assert entry.options[CONF_ENTRY_DELAYS] == {}
+
+
+async def test_options_per_mode_delays_can_be_cleared(hass: HomeAssistant) -> None:
+    from custom_components.frickelalarm.const import CONF_EXIT_DELAYS
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Haus",
+        data={"name": "Haus"},
+        options={
+            CONF_EXIT_DELAY: 30,
+            CONF_ENTRY_DELAY: 30,
+            CONF_TRIGGER_DURATION: 120,
+            CONF_EXIT_DELAYS: {"armed_away": 45},
+        },
+        unique_id="haus",
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result2 = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "per_mode_delays"}
+    )
+    # Leeres Formular absenden -> Override wird entfernt (G)
+    result3 = await hass.config_entries.options.async_configure(
+        result2["flow_id"], {}
+    )
+    assert result3["type"] == FlowResultType.CREATE_ENTRY
+    assert entry.options[CONF_EXIT_DELAYS] == {}
+
+
+async def test_options_general_can_remove_code(hass: HomeAssistant) -> None:
+    from custom_components.frickelalarm.const import CONF_CODE_HASH, CONF_CODE_SET
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Haus",
+        data={"name": "Haus"},
+        options={CONF_CODE_HASH: "deadbeef", CONF_CODE_SET: True},
+        unique_id="haus",
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result2 = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "general"}
+    )
+    # Schalter „Code entfernen" setzen -> Hash gelöscht, code_set False (G)
+    result3 = await hass.config_entries.options.async_configure(
+        result2["flow_id"], {"code_remove": True}
+    )
+    assert result3["type"] == FlowResultType.CREATE_ENTRY
+    assert entry.options[CONF_CODE_SET] is False
+    assert entry.options[CONF_CODE_HASH] is None

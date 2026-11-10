@@ -74,6 +74,7 @@
         "title": "General",
         "data": {
           "code": "Code (PIN, optional)",
+          "code_remove": "Remove code (an empty field alone does not delete it)",
           "code_arm_required": "Require code to arm",
           "code_disarm_required": "Require code to disarm",
           "tamper_detection": "Report tamper/signal loss (sensor unavailable while armed)",
@@ -219,6 +220,15 @@
     },
     "invalid_sensor": {
       "message": "Unknown or unsuitable sensor: {sensor} (only binary_sensor or input_boolean)."
+    },
+    "pin_too_short": {
+      "message": "PIN is too short (at least 4 characters)."
+    },
+    "guest_pin_needs_permanent_code": {
+      "message": "A guest PIN with an expiry date is only possible when a permanent code (main code or a PIN without expiry) is set – otherwise the system locks itself out once it expires."
+    },
+    "last_permanent_code": {
+      "message": "This PIN is the last permanent code; it cannot be removed while guest PINs remain and no main code is set."
     }
   }
 }

@@ -96,11 +96,17 @@ _SECONDS = NumberSelector(
 def _code_options(code: str) -> dict[str, Any]:
     """Code zu Hash-Optionen verrechnen (#6). Nie Klartext in den Optionen.
 
-    code == "" bedeutet: kein Code gesetzt. Für „unverändert lassen" ruft der
-    Aufrufer diese Funktion gar nicht erst auf.
+    code == "" löscht den Code vollständig (Hash/Salt werden auf None gesetzt, damit
+    `_code_set` sicher False ist). Für „unverändert lassen" ruft der Aufrufer diese
+    Funktion gar nicht erst auf.
     """
     if not code:
-        return {CONF_CODE_SET: False}
+        return {
+            CONF_CODE_HASH: None,
+            CONF_CODE_SALT: None,
+            CONF_CODE_IS_NUMBER: None,
+            CONF_CODE_SET: False,
+        }
     from .alarm_control_panel import _hash_code, _new_salt
 
     salt = _new_salt()
@@ -219,20 +225,22 @@ class FrickelalarmOptionsFlow(OptionsFlow):
 
         cur_exit = opts.get(CONF_EXIT_DELAYS, {}) or {}
         cur_entry = opts.get(CONF_ENTRY_DELAYS, {}) or {}
+        # suggested_value (statt default): ein geleertes Feld bleibt leer und
+        # entfernt damit den Modus-Override wieder (G).
         fields: dict[Any, Any] = {}
         for mode in ARM_MODES:
-            ex_key = (
-                vol.Optional(f"exit_{mode}", default=cur_exit[mode])
-                if mode in cur_exit
-                else vol.Optional(f"exit_{mode}")
-            )
-            en_key = (
-                vol.Optional(f"entry_{mode}", default=cur_entry[mode])
-                if mode in cur_entry
-                else vol.Optional(f"entry_{mode}")
-            )
-            fields[ex_key] = _SECONDS
-            fields[en_key] = _SECONDS
+            fields[
+                vol.Optional(
+                    f"exit_{mode}",
+                    description={"suggested_value": cur_exit.get(mode)},
+                )
+            ] = _SECONDS
+            fields[
+                vol.Optional(
+                    f"entry_{mode}",
+                    description={"suggested_value": cur_entry.get(mode)},
+                )
+            ] = _SECONDS
         return self.async_show_form(
             step_id="per_mode_delays", data_schema=vol.Schema(fields)
         )
@@ -421,9 +429,12 @@ class FrickelalarmOptionsFlow(OptionsFlow):
                 ),
             }
             # Leeres Code-Feld = Code unverändert lassen (nicht versehentlich löschen).
-            # Nur bei Eingabe neu hashen – nie Klartext speichern (#6).
+            # Schalter „Code entfernen" löscht ihn gezielt; sonst nur bei Eingabe neu
+            # hashen – nie Klartext speichern (#6, G).
             entered = (user_input.get(CONF_CODE) or "").strip()
-            if entered:
+            if user_input.get("code_remove"):
+                new.update(_code_options(""))
+            elif entered:
                 new.update(_code_options(entered))
             return self._save(new)
 
@@ -433,6 +444,8 @@ class FrickelalarmOptionsFlow(OptionsFlow):
                 vol.Optional(CONF_CODE, default=""): TextSelector(
                     TextSelectorConfig(type=TextSelectorType.PASSWORD)
                 ),
+                # Gezielt entfernen (leeres Feld allein löscht nicht), G
+                vol.Optional("code_remove", default=False): BooleanSelector(),
                 vol.Optional(
                     CONF_CODE_ARM_REQUIRED,
                     default=opts.get(CONF_CODE_ARM_REQUIRED, False),

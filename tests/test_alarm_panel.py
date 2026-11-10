@@ -261,7 +261,7 @@ async def test_set_automation_service(hass: HomeAssistant) -> None:
     assert resp[eid]["automation"]["auto_arm"] is True
 
 
-async def test_tamper_fires_event(hass: HomeAssistant) -> None:
+async def test_tamper_fires_event_after_grace(hass: HomeAssistant) -> None:
     hass.states.async_set("binary_sensor.motion", "off")
     events = []
     hass.bus.async_listen("frickelalarm_tamper", lambda e: events.append(e))
@@ -271,8 +271,50 @@ async def test_tamper_fires_event(hass: HomeAssistant) -> None:
     await _call(hass, "alarm_control_panel", "alarm_arm_away", {"entity_id": eid})
     hass.states.async_set("binary_sensor.motion", "unavailable")
     await hass.async_block_till_done()
+    # Karenzzeit läuft noch -> noch keine Meldung (E)
+    assert len(events) == 0
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=31))
+    await hass.async_block_till_done()
     assert len(events) == 1
     assert _state(hass, eid) == "armed_away"  # Sabotage meldet, löst aber nicht aus
+
+
+async def test_tamper_recovers_within_grace(hass: HomeAssistant) -> None:
+    """Kurzer Ausfall (Broker-Neustart) innerhalb der Karenzzeit -> keine Meldung (E)."""
+    hass.states.async_set("binary_sensor.motion", "off")
+    events = []
+    hass.bus.async_listen("frickelalarm_tamper", lambda e: events.append(e))
+    _, eid = await _setup(
+        hass, _opts(sensors=[_sensor("binary_sensor.motion")], **{CONF_TAMPER: True})
+    )
+    await _call(hass, "alarm_control_panel", "alarm_arm_away", {"entity_id": eid})
+    hass.states.async_set("binary_sensor.motion", "unavailable")
+    await hass.async_block_till_done()
+    hass.states.async_set("binary_sensor.motion", "off")  # wieder erreichbar
+    await hass.async_block_till_done()
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=31))
+    await hass.async_block_till_done()
+    assert len(events) == 0
+
+
+async def test_tamper_ignores_irrelevant_mode(hass: HomeAssistant) -> None:
+    """Ein nur in armed_away scharfer Sensor meldet im Nachtmodus keine Sabotage (E)."""
+    hass.states.async_set("binary_sensor.motion", "off")
+    events = []
+    hass.bus.async_listen("frickelalarm_tamper", lambda e: events.append(e))
+    _, eid = await _setup(
+        hass,
+        _opts(
+            sensors=[_sensor("binary_sensor.motion", modes=["armed_away"])],
+            **{CONF_TAMPER: True},
+        ),
+    )
+    await _call(hass, "alarm_control_panel", "alarm_arm_night", {"entity_id": eid})
+    hass.states.async_set("binary_sensor.motion", "unavailable")
+    await hass.async_block_till_done()
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=31))
+    await hass.async_block_till_done()
+    assert len(events) == 0
 
 
 async def test_panic_triggers(hass: HomeAssistant) -> None:
@@ -461,3 +503,56 @@ async def test_per_mode_exit_delay(hass: HomeAssistant) -> None:
     # "Nacht" hat kein Override → globaler Wert 0 → sofort scharf
     await _call(hass, "alarm_control_panel", "alarm_arm_night", {"entity_id": eid})
     assert _state(hass, eid) == "armed_night"
+
+
+async def test_open_sensor_on_arm_allow_only_reports(hass: HomeAssistant) -> None:
+    """Offener Sensor beim Scharfschalten (allow): nur melden, kein Alarm (A)."""
+    hass.states.async_set("binary_sensor.door", "on")
+    _, eid = await _setup(hass, _opts(sensors=[_sensor("binary_sensor.door")]))
+    await _call(hass, "alarm_control_panel", "alarm_arm_away", {"entity_id": eid})
+    assert _state(hass, eid) == "armed_away"
+    # Eine neue Flanke (aus -> an) löst weiterhin aus
+    hass.states.async_set("binary_sensor.door", "off")
+    await hass.async_block_till_done()
+    hass.states.async_set("binary_sensor.door", "on")
+    await hass.async_block_till_done()
+    assert _state(hass, eid) == "triggered"
+
+
+async def test_guest_pin_requires_permanent_code(hass: HomeAssistant) -> None:
+    """Gast-PIN ohne dauerhaften Code wird abgelehnt (keine Aussperrung, B)."""
+    _, eid = await _setup(hass, _opts())
+    future = (dt_util.utcnow() + timedelta(hours=1)).isoformat()
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(
+            DOMAIN,
+            "add_pin",
+            {"entity_id": eid, "name": "Gast", "pin": "9999", "valid_until": future},
+            blocking=True,
+        )
+
+
+async def test_cannot_remove_last_permanent_pin(hass: HomeAssistant) -> None:
+    """Letzter dauerhafter PIN bleibt, solange Gast-PINs übrig sind (B)."""
+    _, eid = await _setup(hass, _opts())
+    await _call(hass, DOMAIN, "add_pin", {"entity_id": eid, "name": "Chef", "pin": "4321"})
+    future = (dt_util.utcnow() + timedelta(hours=1)).isoformat()
+    await _call(
+        hass,
+        DOMAIN,
+        "add_pin",
+        {"entity_id": eid, "name": "Gast", "pin": "9999", "valid_until": future},
+    )
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(
+            DOMAIN, "remove_pin", {"entity_id": eid, "name": "Chef"}, blocking=True
+        )
+
+
+async def test_add_pin_rejects_too_short(hass: HomeAssistant) -> None:
+    """Leere/zu kurze PIN wird abgelehnt (D)."""
+    _, eid = await _setup(hass, _opts(**{CONF_CODE: "4321"}))
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(
+            DOMAIN, "add_pin", {"entity_id": eid, "name": "X", "pin": "12"}, blocking=True
+        )
