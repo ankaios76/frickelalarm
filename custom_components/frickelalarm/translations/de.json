@@ -25,8 +25,23 @@
           "general": "Allgemein (Code/PIN)",
           "sensors": "Sensoren",
           "times": "Verzögerungen & Alarmdauer",
+          "per_mode_delays": "Verzögerungen je Modus",
           "actions": "Reaktionen (Sirene, Licht, Benachrichtigung)",
           "automation": "Automatik (Präsenz & Nachtplan)"
+        }
+      },
+      "per_mode_delays": {
+        "title": "Verzögerungen je Modus",
+        "description": "Eigene Aus-/Eingangsverzögerung je scharfem Modus (Sekunden). Leer = globaler Wert aus „Verzögerungen & Alarmdauer\". So kann z. B. „Nacht\" ohne Ausgangsverzögerung sofort scharf sein, während „Abwesend\" Zeit zum Verlassen lässt.",
+        "data": {
+          "exit_armed_home": "Ausgang · Zuhause",
+          "entry_armed_home": "Eingang · Zuhause",
+          "exit_armed_away": "Ausgang · Abwesend",
+          "entry_armed_away": "Eingang · Abwesend",
+          "exit_armed_night": "Ausgang · Nacht",
+          "entry_armed_night": "Eingang · Nacht",
+          "exit_armed_vacation": "Ausgang · Urlaub",
+          "entry_armed_vacation": "Eingang · Urlaub"
         }
       },
       "automation": {
@@ -174,6 +189,22 @@
     "skip_exit_delay": {
       "name": "Jetzt scharf",
       "description": "Beendet eine laufende Ausgangsverzögerung sofort."
+    },
+    "add_pin": {
+      "name": "PIN hinzufügen",
+      "description": "Legt einen persönlichen oder Gast-PIN an (oder ändert ihn bei gleichem Namen). PINs werden gehasht gespeichert – nie im Klartext. Nur im unscharfen Zustand möglich.",
+      "fields": {
+        "name": { "name": "Name", "description": "Wer den PIN nutzt (z. B. „Oma\" oder „Putzhilfe\")." },
+        "pin": { "name": "PIN", "description": "Der neue Code. Wird gehasht abgelegt." },
+        "valid_until": { "name": "Gültig bis", "description": "Optional: Zeitpunkt, ab dem der PIN nicht mehr gilt (Gast-PIN). Leer = unbefristet." }
+      }
+    },
+    "remove_pin": {
+      "name": "PIN entfernen",
+      "description": "Entfernt einen PIN (sperrt die Person). Nur im unscharfen Zustand möglich.",
+      "fields": {
+        "name": { "name": "Name", "description": "Name des zu entfernenden PINs." }
+      }
     }
   },
   "exceptions": {

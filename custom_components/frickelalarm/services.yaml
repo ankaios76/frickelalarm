@@ -170,3 +170,32 @@ skip_exit_delay:
     entity:
       integration: frickelalarm
       domain: alarm_control_panel
+
+add_pin:
+  target:
+    entity:
+      integration: frickelalarm
+      domain: alarm_control_panel
+  fields:
+    name:
+      required: true
+      selector:
+        text:
+    pin:
+      required: true
+      selector:
+        text:
+    valid_until:
+      selector:
+        datetime:
+
+remove_pin:
+  target:
+    entity:
+      integration: frickelalarm
+      domain: alarm_control_panel
+  fields:
+    name:
+      required: true
+      selector:
+        text:

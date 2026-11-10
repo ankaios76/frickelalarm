@@ -22,11 +22,15 @@ from custom_components.frickelalarm.const import (
     CONF_AUTO_DISARM,
     CONF_CODE,
     CONF_CODE_ARM_REQUIRED,
+    CONF_CODE_DISARM_REQUIRED,
+    CONF_CODE_HASH,
     CONF_DELAYED,
     CONF_ENTITY_ID,
     CONF_ENTRY_DELAY,
     CONF_EXIT_DELAY,
+    CONF_EXIT_DELAYS,
     CONF_MODES,
+    CONF_PINS,
     CONF_OPEN_ON_ARM,
     CONF_PRESENCE,
     CONF_SENSORS,
@@ -368,3 +372,92 @@ async def test_code_required_rejects_wrong_code(hass: HomeAssistant) -> None:
         {"entity_id": eid, "code": "1234"},
     )
     assert _state(hass, eid) == "armed_away"
+
+
+async def test_code_is_hashed_and_migrated(hass: HomeAssistant) -> None:
+    """Klartext-Code wird beim Setup zu einem Hash migriert (#6)."""
+    entry, eid = await _setup(
+        hass, _opts(**{CONF_CODE: "4321", CONF_CODE_DISARM_REQUIRED: True})
+    )
+    # Kein Klartext mehr in den Optionen, stattdessen ein Hash
+    assert CONF_CODE not in entry.options
+    assert entry.options.get(CONF_CODE_HASH)
+    await _call(hass, "alarm_control_panel", "alarm_arm_away", {"entity_id": eid})
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(
+            "alarm_control_panel",
+            "alarm_disarm",
+            {"entity_id": eid, "code": "0000"},
+            blocking=True,
+        )
+    assert _state(hass, eid) == "armed_away"
+    await _call(
+        hass, "alarm_control_panel", "alarm_disarm", {"entity_id": eid, "code": "4321"}
+    )
+    assert _state(hass, eid) == "disarmed"
+
+
+async def test_guest_pin_disarm_and_expiry(hass: HomeAssistant) -> None:
+    """Gast-PIN schaltet unscharf; abgelaufener PIN wird abgelehnt (#10)."""
+    entry, eid = await _setup(
+        hass, _opts(**{CONF_CODE: "4321", CONF_CODE_DISARM_REQUIRED: True})
+    )
+    future = (dt_util.utcnow() + timedelta(hours=1)).isoformat()
+    await _call(
+        hass,
+        DOMAIN,
+        "add_pin",
+        {"entity_id": eid, "name": "Gast", "pin": "9999", "valid_until": future},
+    )
+    await _call(hass, "alarm_control_panel", "alarm_arm_away", {"entity_id": eid})
+    await _call(
+        hass, "alarm_control_panel", "alarm_disarm", {"entity_id": eid, "code": "9999"}
+    )
+    assert _state(hass, eid) == "disarmed"
+
+    # Abgelaufener PIN: wird abgelehnt, Hauptcode geht weiter
+    past = (dt_util.utcnow() - timedelta(hours=1)).isoformat()
+    await _call(
+        hass,
+        DOMAIN,
+        "add_pin",
+        {"entity_id": eid, "name": "Gast", "pin": "8888", "valid_until": past},
+    )
+    await _call(hass, "alarm_control_panel", "alarm_arm_away", {"entity_id": eid})
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(
+            "alarm_control_panel",
+            "alarm_disarm",
+            {"entity_id": eid, "code": "8888"},
+            blocking=True,
+        )
+    assert _state(hass, eid) == "armed_away"
+    await _call(
+        hass, "alarm_control_panel", "alarm_disarm", {"entity_id": eid, "code": "4321"}
+    )
+    assert _state(hass, eid) == "disarmed"
+
+    # remove_pin sperrt den Gast wieder aus
+    await _call(hass, DOMAIN, "remove_pin", {"entity_id": eid, "name": "Gast"})
+    assert not (entry.options.get(CONF_PINS) or [])
+
+
+async def test_per_mode_exit_delay(hass: HomeAssistant) -> None:
+    """Pro-Modus-Ausgangsverzögerung überschreibt den globalen Wert (#8)."""
+    hass.states.async_set("binary_sensor.door", "off")
+    _, eid = await _setup(
+        hass,
+        _opts(
+            exit_delay=0,
+            sensors=[_sensor("binary_sensor.door", delayed=True)],
+            **{CONF_EXIT_DELAYS: {"armed_away": 30}},
+        ),
+    )
+    # Global 0, aber "Abwesend" hat 30 s → geht in die Ausgangsverzögerung
+    await _call(hass, "alarm_control_panel", "alarm_arm_away", {"entity_id": eid})
+    assert _state(hass, eid) == "arming"
+    await _call(hass, "alarm_control_panel", "alarm_disarm", {"entity_id": eid})
+
+    # "Nacht" hat kein Override → globaler Wert 0 → sofort scharf
+    await _call(hass, "alarm_control_panel", "alarm_arm_night", {"entity_id": eid})
+    assert _state(hass, eid) == "armed_night"

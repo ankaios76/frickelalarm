@@ -99,3 +99,16 @@ SAFE_DEFAULT_MODES = ["armed_away", "armed_vacation"]
 
 # Signal: Optionen geändert (Entität aktualisiert sich live, ohne Reload)
 SIGNAL_OPTIONS_UPDATED = DOMAIN + "_options_updated_{}"
+
+# Code-Hashing (Phase 11, #6): kein Klartext mehr in den Optionen
+CONF_CODE_HASH = "code_hash"
+CONF_CODE_SALT = "code_salt"
+CONF_CODE_IS_NUMBER = "code_is_number"
+CONF_CODE_SET = "code_set"
+
+# Persönliche / Gast-PINs (#10): Liste von {name, hash, salt, is_number, valid_until}
+CONF_PINS = "pins"
+
+# Ein-/Ausgangsverzögerung je Modus (#8): {mode: sekunden} als Overrides, sonst global
+CONF_EXIT_DELAYS = "exit_delays"
+CONF_ENTRY_DELAYS = "entry_delays"

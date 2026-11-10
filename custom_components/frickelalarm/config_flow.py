@@ -43,10 +43,16 @@ from .const import (
     CONF_CODE,
     CONF_CODE_ARM_REQUIRED,
     CONF_CODE_DISARM_REQUIRED,
+    CONF_CODE_HASH,
+    CONF_CODE_IS_NUMBER,
+    CONF_CODE_SALT,
+    CONF_CODE_SET,
     CONF_DELAYED,
     CONF_ENTITY_ID,
     CONF_ENTRY_DELAY,
+    CONF_ENTRY_DELAYS,
     CONF_EXIT_DELAY,
+    CONF_EXIT_DELAYS,
     CONF_MODES,
     CONF_NIGHT_END,
     CONF_NIGHT_REQUIRE_HOME,
@@ -87,6 +93,25 @@ _SECONDS = NumberSelector(
 )
 
 
+def _code_options(code: str) -> dict[str, Any]:
+    """Code zu Hash-Optionen verrechnen (#6). Nie Klartext in den Optionen.
+
+    code == "" bedeutet: kein Code gesetzt. Für „unverändert lassen" ruft der
+    Aufrufer diese Funktion gar nicht erst auf.
+    """
+    if not code:
+        return {CONF_CODE_SET: False}
+    from .alarm_control_panel import _hash_code, _new_salt
+
+    salt = _new_salt()
+    return {
+        CONF_CODE_HASH: _hash_code(code, salt),
+        CONF_CODE_SALT: salt,
+        CONF_CODE_IS_NUMBER: code.isdigit(),
+        CONF_CODE_SET: True,
+    }
+
+
 class FrickelalarmConfigFlow(ConfigFlow, domain=DOMAIN):
     """Ersteinrichtung: ein Alarmbereich pro Eintrag."""
 
@@ -100,15 +125,15 @@ class FrickelalarmConfigFlow(ConfigFlow, domain=DOMAIN):
             name = user_input[CONF_NAME].strip()
             await self.async_set_unique_id(name.casefold())
             self._abort_if_unique_id_configured()
-            return self.async_create_entry(
-                title=name,
-                data={CONF_NAME: name},
-                options={
-                    CONF_CODE: (user_input.get(CONF_CODE) or "").strip(),
-                    CONF_CODE_ARM_REQUIRED: user_input.get(CONF_CODE_ARM_REQUIRED, False),
-                    CONF_CODE_DISARM_REQUIRED: user_input.get(
-                        CONF_CODE_DISARM_REQUIRED, True
-                    ),
+            options: dict[str, Any] = {
+                CONF_CODE_ARM_REQUIRED: user_input.get(CONF_CODE_ARM_REQUIRED, False),
+                CONF_CODE_DISARM_REQUIRED: user_input.get(
+                    CONF_CODE_DISARM_REQUIRED, True
+                ),
+                **_code_options((user_input.get(CONF_CODE) or "").strip()),
+            }
+            options.update(
+                {
                     CONF_SENSORS: [],
                     CONF_EXIT_DELAY: DEFAULT_EXIT_DELAY,
                     CONF_ENTRY_DELAY: DEFAULT_ENTRY_DELAY,
@@ -118,6 +143,9 @@ class FrickelalarmConfigFlow(ConfigFlow, domain=DOMAIN):
                     CONF_NOTIFY_MESSAGE: DEFAULT_NOTIFY_MESSAGE,
                     CONF_NOTIFY_EVENTS: ["triggered"],
                 },
+            )
+            return self.async_create_entry(
+                title=name, data={CONF_NAME: name}, options=options
             )
 
         schema = vol.Schema(
@@ -157,7 +185,56 @@ class FrickelalarmOptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         return self.async_show_menu(
             step_id="init",
-            menu_options=["general", "sensors", "times", "actions", "automation"],
+            menu_options=[
+                "general",
+                "sensors",
+                "times",
+                "per_mode_delays",
+                "actions",
+                "automation",
+            ],
+        )
+
+    # --- Ein-/Ausgangsverzögerung je Modus (#8) ---------------------------
+    async def async_step_per_mode_delays(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        opts = self.config_entry.options
+        if user_input is not None:
+            exit_delays: dict[str, int] = {}
+            entry_delays: dict[str, int] = {}
+            for mode in ARM_MODES:
+                ex = user_input.get(f"exit_{mode}")
+                en = user_input.get(f"entry_{mode}")
+                if ex not in (None, ""):
+                    exit_delays[mode] = int(ex)
+                if en not in (None, ""):
+                    entry_delays[mode] = int(en)
+            return self._save(
+                {
+                    CONF_EXIT_DELAYS: exit_delays,
+                    CONF_ENTRY_DELAYS: entry_delays,
+                }
+            )
+
+        cur_exit = opts.get(CONF_EXIT_DELAYS, {}) or {}
+        cur_entry = opts.get(CONF_ENTRY_DELAYS, {}) or {}
+        fields: dict[Any, Any] = {}
+        for mode in ARM_MODES:
+            ex_key = (
+                vol.Optional(f"exit_{mode}", default=cur_exit[mode])
+                if mode in cur_exit
+                else vol.Optional(f"exit_{mode}")
+            )
+            en_key = (
+                vol.Optional(f"entry_{mode}", default=cur_entry[mode])
+                if mode in cur_entry
+                else vol.Optional(f"entry_{mode}")
+            )
+            fields[ex_key] = _SECONDS
+            fields[en_key] = _SECONDS
+        return self.async_show_form(
+            step_id="per_mode_delays", data_schema=vol.Schema(fields)
         )
 
     # --- Automatik (Präsenz + Zeitplan) -----------------------------------
@@ -328,27 +405,27 @@ class FrickelalarmOptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         opts = self.config_entry.options
         if user_input is not None:
-            # Leeres Code-Feld = Code unverändert lassen (nicht versehentlich löschen)
+            new = {
+                CONF_CODE_ARM_REQUIRED: user_input.get(
+                    CONF_CODE_ARM_REQUIRED, False
+                ),
+                CONF_CODE_DISARM_REQUIRED: user_input.get(
+                    CONF_CODE_DISARM_REQUIRED, True
+                ),
+                CONF_TAMPER: user_input.get(CONF_TAMPER, DEFAULT_TAMPER),
+                CONF_TAMPER_TRIGGERS: user_input.get(
+                    CONF_TAMPER_TRIGGERS, DEFAULT_TAMPER_TRIGGERS
+                ),
+                CONF_OPEN_ON_ARM: user_input.get(
+                    CONF_OPEN_ON_ARM, DEFAULT_OPEN_ON_ARM
+                ),
+            }
+            # Leeres Code-Feld = Code unverändert lassen (nicht versehentlich löschen).
+            # Nur bei Eingabe neu hashen – nie Klartext speichern (#6).
             entered = (user_input.get(CONF_CODE) or "").strip()
-            code = entered if entered else opts.get(CONF_CODE, "")
-            return self._save(
-                {
-                    CONF_CODE: code,
-                    CONF_CODE_ARM_REQUIRED: user_input.get(
-                        CONF_CODE_ARM_REQUIRED, False
-                    ),
-                    CONF_CODE_DISARM_REQUIRED: user_input.get(
-                        CONF_CODE_DISARM_REQUIRED, True
-                    ),
-                    CONF_TAMPER: user_input.get(CONF_TAMPER, DEFAULT_TAMPER),
-                    CONF_TAMPER_TRIGGERS: user_input.get(
-                        CONF_TAMPER_TRIGGERS, DEFAULT_TAMPER_TRIGGERS
-                    ),
-                    CONF_OPEN_ON_ARM: user_input.get(
-                        CONF_OPEN_ON_ARM, DEFAULT_OPEN_ON_ARM
-                    ),
-                }
-            )
+            if entered:
+                new.update(_code_options(entered))
+            return self._save(new)
 
         schema = vol.Schema(
             {

@@ -7,7 +7,7 @@
 <p align="center">
   <img alt="HACS Custom" src="https://img.shields.io/badge/HACS-Custom-1f3b39?style=flat-square">
   <img alt="Home Assistant 2026.2+" src="https://img.shields.io/badge/Home%20Assistant-2026.2%2B-1f3b39?style=flat-square">
-  <img alt="Version 0.11.0-beta" src="https://img.shields.io/badge/Version-0.12.0--beta-f0b44c?style=flat-square">
+  <img alt="Version 0.13.0-beta" src="https://img.shields.io/badge/Version-0.13.0--beta-f0b44c?style=flat-square">
   <img alt="License MIT" src="https://img.shields.io/badge/License-MIT-1f3b39?style=flat-square">
   <a href="https://github.com/ankaios76/frickelalarm/actions/workflows/validate.yml"><img alt="CI" src="https://github.com/ankaios76/frickelalarm/actions/workflows/validate.yml/badge.svg"></a>
 </p>
@@ -21,12 +21,14 @@
   <img src="https://raw.githubusercontent.com/ankaios76/frickelalarm/main/docs/card.png" width="360" alt="Die Frickelalarm-Karte im Dashboard">
 </p>
 
-> **Status: 0.12.0 – öffentliche Beta.** Engine mit Reaktionen und Komfort, Präsenz-/Zeit-Automatik,
+> **Status: 0.13.0 – öffentliche Beta.** Engine mit Reaktionen und Komfort, Präsenz-/Zeit-Automatik,
 > eigene Lovelace-Karte und Sabotage-Erkennung – und als Einziges **per Dienst/LLM (MCP)
-> konfigurierbar**. Automatisierte Test-Suite und CI (hassfest + HACS + pytest). Siehe
-> [CONCEPT.md](CONCEPT.md). Rückmeldungen und Tester sind ausdrücklich willkommen.
+> konfigurierbar**. 0.13.0 härtet die Codes: **gehashte Speicherung** (kein Klartext),
+> **persönliche und Gast-PINs** sowie **Aus-/Eingangsverzögerung je Modus**. Automatisierte
+> Test-Suite und CI (hassfest + HACS + pytest). Siehe [CONCEPT.md](CONCEPT.md). Rückmeldungen und
+> Tester sind ausdrücklich willkommen.
 
-## Was schon funktioniert (0.12.0)
+## Was schon funktioniert (0.13.0)
 
 - Bedienfeld (`alarm_control_panel`) mit den Modi **Zuhause / Abwesend / Nacht / Urlaub**
 - **Sensorauswahl je Modus**: pro Sensor festlegen, in welchen Modi er scharf ist
@@ -43,7 +45,12 @@
 - **Alarmdauer**, danach automatisches Wiederschärfen in den vorherigen Modus
 - **Reaktionen im Alarmfall**: gewählte Aktoren (Sirene/Licht/Schalter) gehen bei `triggered` an
   und danach wieder aus; optionale **Benachrichtigung** je Ereignis mit frei formulierbarem Text
-- optionaler **Code/PIN**, getrennt für Scharf- und/oder Unscharfschalten
+- optionaler **Code/PIN**, getrennt für Scharf- und/oder Unscharfschalten – **gehasht gespeichert
+  (PBKDF2), nie im Klartext**; bestehende Einträge werden automatisch migriert
+- **Persönliche und Gast-PINs** (`add_pin` / `remove_pin`): zusätzliche Codes je Person, optional mit
+  Ablaufdatum (Gast-PIN); bei jedem Auslösen/Unscharfschalten wird vermerkt, welcher Code gehandelt hat (`actor`)
+- **Aus-/Eingangsverzögerung je Modus**: überschreibt die globale Verzögerung für einzelne Modi
+  (z. B. „Nacht" sofort scharf, während „Abwesend" Zeit zum Verlassen lässt)
 - **Mehrere Bereiche/Partitionen**: ein Eintrag = ein Bereich
 - **Bypass**: Sensoren per Dienst (`frickelalarm.bypass` / `clear_bypass`) temporär ausklammern
   (gilt bis zum nächsten Unscharfschalten; „immer scharf"-Sensoren sind davon ausgenommen)
@@ -56,7 +63,8 @@
 - **Automatik**: **Auto-scharf**, wenn alle gewählten Personen weg sind (mit Verzögerung),
   **Auto-unscharf** bei Heimkehr der ersten Person, und **Nachtmodus nach Zeitplan**
 - **Konfiguration per Dienst** (`add_sensor`, `remove_sensor`, `set_times`, `set_reactions`,
-  `set_automation`, `get_config`) – damit auch per LLM über den Home-Assistant-MCP-Server einrichtbar
+  `set_automation`, `add_pin`, `remove_pin`, `get_config`) – damit auch per LLM über den
+  Home-Assistant-MCP-Server einrichtbar
 - Zustand übersteht Neustarts – auch ein laufender Alarm, eine Verzögerung oder Bypass werden nach einem Neustart fortgesetzt
 
 ## Oberfläche

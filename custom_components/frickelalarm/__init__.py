@@ -10,10 +10,19 @@ import logging
 import os
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
-from .const import DOMAIN, PLATFORMS, SIGNAL_OPTIONS_UPDATED
+from .const import (
+    CONF_CODE,
+    CONF_CODE_HASH,
+    CONF_CODE_IS_NUMBER,
+    CONF_CODE_SALT,
+    CONF_CODE_SET,
+    DOMAIN,
+    PLATFORMS,
+    SIGNAL_OPTIONS_UPDATED,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -40,9 +49,31 @@ async def _register_frontend(hass: HomeAssistant) -> None:
         _LOGGER.warning("Frickelalarm: Lovelace-Karte konnte nicht registriert werden", exc_info=True)
 
 
+@callback
+def _migrate_code(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Alten Klartext-Code zu einem Hash migrieren (#6). Danach kein Klartext mehr."""
+    o = entry.options
+    if CONF_CODE not in o:
+        return
+    from .alarm_control_panel import _hash_code, _new_salt
+
+    code = (o.get(CONF_CODE) or "").strip()
+    new = {k: v for k, v in o.items() if k != CONF_CODE}
+    if code:
+        salt = _new_salt()
+        new[CONF_CODE_HASH] = _hash_code(code, salt)
+        new[CONF_CODE_SALT] = salt
+        new[CONF_CODE_IS_NUMBER] = code.isdigit()
+        new[CONF_CODE_SET] = True
+    else:
+        new[CONF_CODE_SET] = False
+    hass.config_entries.async_update_entry(entry, options=new)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Einen Alarmbereich einrichten."""
     hass.data.setdefault(DOMAIN, {})
+    _migrate_code(hass, entry)
     await _register_frontend(hass)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))

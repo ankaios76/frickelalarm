@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import dataclasses
 from datetime import timedelta
+import hashlib
 import logging
+import os
 from typing import Any
 
 import voluptuous as vol
@@ -59,13 +61,19 @@ from .const import (
     CONF_AUTO_ARM_MODE,
     CONF_AUTO_DISARM,
     CONF_AUTO_DISARM_DURING_ALARM,
-    CONF_CODE,
     CONF_CODE_ARM_REQUIRED,
     CONF_CODE_DISARM_REQUIRED,
+    CONF_CODE_HASH,
+    CONF_CODE_IS_NUMBER,
+    CONF_CODE_SALT,
+    CONF_CODE_SET,
     CONF_DELAYED,
     CONF_ENTITY_ID,
     CONF_ENTRY_DELAY,
+    CONF_ENTRY_DELAYS,
     CONF_EXIT_DELAY,
+    CONF_EXIT_DELAYS,
+    CONF_PINS,
     CONF_MODES,
     CONF_NIGHT_END,
     CONF_NIGHT_REQUIRE_HOME,
@@ -134,6 +142,17 @@ class FrickelalarmExtraData(ExtraStoredData):
             night_active=bool(data.get("night_active", False)),
             bypassed=list(data.get("bypassed") or []),
         )
+
+
+def _new_salt() -> str:
+    return os.urandom(16).hex()
+
+
+def _hash_code(code: str, salt_hex: str) -> str:
+    """Code mit PBKDF2-HMAC-SHA256 gegen den Salt hashen (kein Klartext, #6)."""
+    return hashlib.pbkdf2_hmac(
+        "sha256", str(code).encode("utf-8"), bytes.fromhex(salt_hex), 120000
+    ).hex()
 
 
 async def async_setup_entry(
@@ -215,6 +234,21 @@ async def async_setup_entry(
         platform.async_register_entity_service(
             "skip_exit_delay", None, "async_skip_exit_delay"
         )
+        # Persönliche / Gast-PINs (#10)
+        platform.async_register_entity_service(
+            "add_pin",
+            {
+                vol.Required("name"): cv.string,
+                vol.Required("pin"): cv.string,
+                vol.Optional("valid_until"): cv.datetime,
+            },
+            "async_add_pin",
+        )
+        platform.async_register_entity_service(
+            "remove_pin",
+            {vol.Required("name"): cv.string},
+            "async_remove_pin",
+        )
 
 
 class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
@@ -250,6 +284,7 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
         self._cancel_trigger = None
         self._unsub_sensors = None
         self._bypassed: set[str] = set()
+        self._last_actor: str | None = None  # welcher PIN zuletzt passte (#10)
         # Automatik-Laufzeitstatus
         self._unsub_presence = None
         self._unsub_time: list = []
@@ -269,6 +304,18 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
     def _entry_delay(self) -> int:
         return int(self._entry.options.get(CONF_ENTRY_DELAY, DEFAULT_ENTRY_DELAY))
 
+    def _exit_delay_for(self, mode: AlarmControlPanelState | None) -> int:
+        """Ausgangsverzögerung je Modus (#8), sonst global."""
+        key = mode.value if mode is not None else None
+        override = (self._entry.options.get(CONF_EXIT_DELAYS) or {}).get(key)
+        return int(override) if override is not None else self._exit_delay
+
+    def _entry_delay_for(self, mode: AlarmControlPanelState | None) -> int:
+        """Eingangsverzögerung je Modus (#8), sonst global."""
+        key = mode.value if mode is not None else None
+        override = (self._entry.options.get(CONF_ENTRY_DELAYS) or {}).get(key)
+        return int(override) if override is not None else self._entry_delay
+
     @property
     def _trigger_duration(self) -> int:
         return int(
@@ -276,18 +323,39 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
         )
 
     @property
-    def _code(self) -> str:
-        return str(self._entry.options.get(CONF_CODE, "") or "")
+    def _code_set(self) -> bool:
+        o = self._entry.options
+        return bool(o.get(CONF_CODE_HASH)) or bool(o.get(CONF_CODE_SET, False))
+
+    @property
+    def _active_pins(self) -> list[dict[str, Any]]:
+        """Nicht abgelaufene Zusatz-PINs (#10)."""
+        now = dt_util.utcnow().timestamp()
+        pins = []
+        for pin in self._entry.options.get(CONF_PINS) or []:
+            vu = pin.get("valid_until")
+            if vu and now > float(vu):
+                continue
+            pins.append(pin)
+        return pins
+
+    @property
+    def _any_code_required(self) -> bool:
+        return self._code_set or bool(self._entry.options.get(CONF_PINS))
 
     @property
     def code_format(self) -> CodeFormat | None:
-        if not self._code:
+        if not self._any_code_required:
             return None
-        return CodeFormat.NUMBER if self._code.isdigit() else CodeFormat.TEXT
+        o = self._entry.options
+        numeric = bool(o.get(CONF_CODE_IS_NUMBER, True)) if self._code_set else True
+        for pin in o.get(CONF_PINS) or []:
+            numeric = numeric and bool(pin.get("is_number", True))
+        return CodeFormat.NUMBER if numeric else CodeFormat.TEXT
 
     @property
     def code_arm_required(self) -> bool:
-        return bool(self._code) and bool(
+        return self._any_code_required and bool(
             self._entry.options.get(CONF_CODE_ARM_REQUIRED, False)
         )
 
@@ -388,6 +456,15 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
             "nachtplan": self._night_schedule,
             "personen_zuhause": self._someone_home(),
         }
+        # Aktive PINs (ohne Hashes), #10
+        attrs["pins"] = [
+            {
+                "name": p.get("name"),
+                "gast": p.get("valid_until") is not None,
+                "gueltig_bis": p.get("valid_until"),
+            }
+            for p in (self._entry.options.get(CONF_PINS) or [])
+        ]
         return attrs
 
     # --- Lifecycle --------------------------------------------------------
@@ -695,6 +772,8 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
                 "name": self._entry.data.get(CONF_NAME, DEFAULT_NAME),
                 "mode": self._arm_mode.value if self._arm_mode else None,
                 "reason": self._reason or None,
+                # wer per PIN bedient hat (None = Hauptcode/kein Code), #10
+                "actor": self._last_actor,
             },
         )
 
@@ -870,19 +949,36 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
             return
 
         # Scharf: verzögerter Sensor startet pending, sonst Sofortalarm
-        if cfg.get(CONF_DELAYED, False) and self._entry_delay > 0:
+        if cfg.get(CONF_DELAYED, False) and self._entry_delay_for(self._arm_mode) > 0:
             self._start_pending(name)
         else:
             self._trigger(name)
 
     # --- Zustandsübergänge ------------------------------------------------
     def _validate(self, code: str | None, required: bool) -> None:
-        if not self._code or not required:
+        """Code gegen Hauptcode (gehasht) und aktive PINs prüfen (#6/#10)."""
+        self._last_actor = None
+        if not self._any_code_required or not required:
             return
-        if str(code or "") != self._code:
-            raise ServiceValidationError(
-                translation_domain=DOMAIN, translation_key="invalid_code"
-            )
+        entered = str(code or "")
+        o = self._entry.options
+
+        if self._code_set:
+            h = o.get(CONF_CODE_HASH)
+            s = o.get(CONF_CODE_SALT)
+            if h and s and _hash_code(entered, s) == h:
+                return  # Hauptcode
+
+        for pin in self._active_pins:
+            if pin.get("hash") and pin.get("salt") and _hash_code(
+                entered, pin["salt"]
+            ) == pin["hash"]:
+                self._last_actor = pin.get("name")
+                return
+
+        raise ServiceValidationError(
+            translation_domain=DOMAIN, translation_key="invalid_code"
+        )
 
     @callback
     def _open_active_sensors(self, target: AlarmControlPanelState) -> list[str]:
@@ -931,8 +1027,9 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
         self._clear_timers()
         self._arm_mode = target
         self._reason = None
-        if self._exit_delay > 0:
-            self._begin_arming(self._exit_delay)
+        exit_delay = self._exit_delay_for(target)
+        if exit_delay > 0:
+            self._begin_arming(exit_delay)
         else:
             self._finish_arming_now()
 
@@ -960,6 +1057,7 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
         self._clear_timers()
         self._arm_mode = target
         self._reason = None
+        self._last_actor = None
         self._set(target)
         self._check_active_open()
 
@@ -978,7 +1076,7 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
             if st is None or st.state != STATE_ON:
                 continue
             name = st.name or cfg[CONF_ENTITY_ID]
-            if cfg.get(CONF_DELAYED, False) and self._entry_delay > 0:
+            if cfg.get(CONF_DELAYED, False) and self._entry_delay_for(self._arm_mode) > 0:
                 self._start_pending(name)
             else:
                 self._trigger(name)
@@ -986,7 +1084,7 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
 
     @callback
     def _start_pending(self, reason: str) -> None:
-        self._begin_pending(self._entry_delay, reason)
+        self._begin_pending(self._entry_delay_for(self._arm_mode), reason)
 
     @callback
     def _begin_pending(self, seconds: int, reason: str) -> None:
@@ -1004,6 +1102,7 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
     def _trigger(self, reason: str, duration: int | None = None) -> None:
         self._clear_timers()
         self._reason = reason
+        self._last_actor = None
         _LOGGER.info("Frickelalarm '%s' ausgelöst durch: %s", self.name, reason)
         dur = self._trigger_duration if duration is None else duration
         if dur > 0:
@@ -1211,6 +1310,39 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
         if changes:
             self._update_options(changes)
 
+    async def async_add_pin(
+        self, name: str, pin: str, valid_until: Any | None = None
+    ) -> None:
+        """Einen persönlichen oder Gast-PIN hinzufügen/aktualisieren (#10)."""
+        self._require_disarmed()
+        salt = _new_salt()
+        vu = valid_until.timestamp() if valid_until is not None else None
+        pins = [
+            p
+            for p in (self._entry.options.get(CONF_PINS) or [])
+            if p.get("name") != name
+        ]
+        pins.append(
+            {
+                "name": name,
+                "hash": _hash_code(pin, salt),
+                "salt": salt,
+                "is_number": str(pin).isdigit(),
+                "valid_until": vu,
+            }
+        )
+        self._update_options({CONF_PINS: pins})
+
+    async def async_remove_pin(self, name: str) -> None:
+        """Einen PIN entfernen (Benutzer sperren, #10)."""
+        self._require_disarmed()
+        pins = [
+            p
+            for p in (self._entry.options.get(CONF_PINS) or [])
+            if p.get("name") != name
+        ]
+        self._update_options({CONF_PINS: pins})
+
     async def async_get_config(self) -> ServiceResponse:
         """Aktuelle Konfiguration zurückgeben (für LLM/MCP und Automationen)."""
         o = self._entry.options
@@ -1219,8 +1351,18 @@ class FrickelalarmPanel(AlarmControlPanelEntity, RestoreEntity):
             "state": self._attr_alarm_state.value if self._attr_alarm_state else None,
             "exit_delay": self._exit_delay,
             "entry_delay": self._entry_delay,
+            "exit_delays": o.get(CONF_EXIT_DELAYS) or {},
+            "entry_delays": o.get(CONF_ENTRY_DELAYS) or {},
             "trigger_duration": self._trigger_duration,
-            "code_set": bool(self._code),
+            "code_set": self._code_set,
+            "pins": [
+                {
+                    "name": p.get("name"),
+                    "guest": p.get("valid_until") is not None,
+                    "valid_until": p.get("valid_until"),
+                }
+                for p in (o.get(CONF_PINS) or [])
+            ],
             "tamper_detection": self._tamper_enabled,
             "tamper_triggers": bool(
                 o.get(CONF_TAMPER_TRIGGERS, DEFAULT_TAMPER_TRIGGERS)

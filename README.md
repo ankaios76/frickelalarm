@@ -7,7 +7,7 @@
 <p align="center">
   <img alt="HACS Custom" src="https://img.shields.io/badge/HACS-Custom-1f3b39?style=flat-square">
   <img alt="Home Assistant 2026.2+" src="https://img.shields.io/badge/Home%20Assistant-2026.2%2B-1f3b39?style=flat-square">
-  <img alt="Version 0.11.0-beta" src="https://img.shields.io/badge/Version-0.12.0--beta-f0b44c?style=flat-square">
+  <img alt="Version 0.13.0-beta" src="https://img.shields.io/badge/Version-0.13.0--beta-f0b44c?style=flat-square">
   <img alt="License MIT" src="https://img.shields.io/badge/License-MIT-1f3b39?style=flat-square">
   <a href="https://github.com/ankaios76/frickelalarm/actions/workflows/validate.yml"><img alt="CI" src="https://github.com/ankaios76/frickelalarm/actions/workflows/validate.yml/badge.svg"></a>
 </p>
@@ -21,12 +21,13 @@
   <img src="https://raw.githubusercontent.com/ankaios76/frickelalarm/main/docs/card.png" width="360" alt="The Frickelalarm card on a dashboard">
 </p>
 
-> **Status: 0.12.0 – public beta.** Engine with reactions and convenience features, presence/time
+> **Status: 0.13.0 – public beta.** Engine with reactions and convenience features, presence/time
 > automation, its own Lovelace card and tamper detection – and, uniquely, **configurable through
-> services / an LLM (MCP)**. Automated test suite and CI (hassfest + HACS + pytest). See
-> [CONCEPT.md](CONCEPT.md) (German). Feedback and testers are very welcome.
+> services / an LLM (MCP)**. 0.13.0 hardens the codes: **hashed storage** (no plaintext),
+> **personal and guest PINs** and **per-mode exit/entry delays**. Automated test suite and CI
+> (hassfest + HACS + pytest). See [CONCEPT.md](CONCEPT.md) (German). Feedback and testers are very welcome.
 
-## What already works (0.12.0)
+## What already works (0.13.0)
 
 - Control panel (`alarm_control_panel`) with the modes **Home / Away / Night / Vacation**
 - **Per-mode sensor selection**: decide for each sensor which modes it is armed in
@@ -43,7 +44,12 @@
 - **Alarm duration**, then automatic re-arming to the previous mode
 - **Reactions on alarm**: chosen actors (siren/light/switch) turn on at `triggered` and off again
   afterwards; optional **notification** per event with a freely worded message
-- optional **code/PIN**, separately for arming and/or disarming
+- optional **code/PIN**, separately for arming and/or disarming – **stored hashed (PBKDF2), never in
+  plaintext**; existing entries are migrated automatically
+- **Personal and guest PINs** (`add_pin` / `remove_pin`): extra codes per person, optionally with an
+  expiry date (guest PIN); every trigger/disarm records which code acted (`actor`)
+- **Per-mode exit/entry delays**: override the global delay for individual modes (e.g. arm "Night"
+  instantly while "Away" still leaves time to leave)
 - **Multiple areas/partitions**: one entry = one area
 - **Bypass**: temporarily exclude sensors via service (`frickelalarm.bypass` / `clear_bypass`)
   (until the next disarm; "always armed" sensors are exempt)
@@ -56,7 +62,8 @@
 - **Automation**: **auto-arm** when all chosen people have left (with a delay), **auto-disarm** when
   the first person returns, and **night mode on a schedule**
 - **Configuration through services** (`add_sensor`, `remove_sensor`, `set_times`, `set_reactions`,
-  `set_automation`, `get_config`) – so it can also be set up by an LLM via the Home Assistant MCP server
+  `set_automation`, `add_pin`, `remove_pin`, `get_config`) – so it can also be set up by an LLM via the
+  Home Assistant MCP server
 - State survives restarts – including a running alarm, delay or bypass (resumed after a restart)
 
 ## Interface

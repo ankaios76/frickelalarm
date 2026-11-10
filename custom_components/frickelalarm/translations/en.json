@@ -25,8 +25,23 @@
           "general": "General (code/PIN)",
           "sensors": "Sensors",
           "times": "Delays & alarm duration",
+          "per_mode_delays": "Per-mode delays",
           "actions": "Reactions (siren, light, notification)",
           "automation": "Automation (presence & night schedule)"
+        }
+      },
+      "per_mode_delays": {
+        "title": "Per-mode delays",
+        "description": "Own exit/entry delay per armed mode (seconds). Empty = global value from \"Delays & alarm duration\". So e.g. \"Night\" can arm instantly with no exit delay while \"Away\" still leaves time to leave.",
+        "data": {
+          "exit_armed_home": "Exit · Home",
+          "entry_armed_home": "Entry · Home",
+          "exit_armed_away": "Exit · Away",
+          "entry_armed_away": "Entry · Away",
+          "exit_armed_night": "Exit · Night",
+          "entry_armed_night": "Entry · Night",
+          "exit_armed_vacation": "Exit · Vacation",
+          "entry_armed_vacation": "Entry · Vacation"
         }
       },
       "automation": {
@@ -174,6 +189,22 @@
     "skip_exit_delay": {
       "name": "Arm now",
       "description": "Ends a running exit delay immediately."
+    },
+    "add_pin": {
+      "name": "Add PIN",
+      "description": "Adds a personal or guest PIN (or updates it when the name matches). PINs are stored hashed – never in plain text. Only possible while disarmed.",
+      "fields": {
+        "name": { "name": "Name", "description": "Who uses the PIN (e.g. \"Grandma\" or \"Cleaner\")." },
+        "pin": { "name": "PIN", "description": "The new code. Stored hashed." },
+        "valid_until": { "name": "Valid until", "description": "Optional: point in time after which the PIN stops working (guest PIN). Empty = no expiry." }
+      }
+    },
+    "remove_pin": {
+      "name": "Remove PIN",
+      "description": "Removes a PIN (locks out that person). Only possible while disarmed.",
+      "fields": {
+        "name": { "name": "Name", "description": "Name of the PIN to remove." }
+      }
     }
   },
   "exceptions": {
